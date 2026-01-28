@@ -1,17 +1,31 @@
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-// Añadimos la extensión .tsx para ayudar al navegador en entornos estáticos
 import App from './App.tsx';
 
-const rootElement = document.getElementById('root');
-if (!rootElement) {
-  throw new Error("Could not find root element to mount to");
-}
+/**
+ * TaskFlow Pro Entry Point
+ * Este archivo es procesado en tiempo real por Babel en el navegador.
+ */
 
-const root = ReactDOM.createRoot(rootElement);
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+try {
+    const rootElement = document.getElementById('root');
+    if (!rootElement) {
+        throw new Error("No se encontró el elemento raíz 'root' en el HTML.");
+    }
+
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(
+        <React.StrictMode>
+            <App />
+        </React.StrictMode>
+    );
+} catch (error) {
+    console.error("Fallo crítico en el renderizado:", error);
+    // Intentamos mostrar el error en la UI de carga si es posible
+    const msgEl = document.getElementById('error-message');
+    if (msgEl) {
+        document.getElementById('loading-ui').style.display = 'none';
+        document.getElementById('error-display').style.display = 'block';
+        msgEl.textContent = error instanceof Error ? error.message : String(error);
+    }
+}
