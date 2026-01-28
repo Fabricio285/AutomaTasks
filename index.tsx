@@ -1,16 +1,16 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
 import { 
   LayoutDashboard, CheckSquare, Users, Settings, LogOut, Plus, Clock, 
-  TrendingUp, RefreshCw, AlertCircle, Info, ChevronRight, BarChart2, Trash2, X, Edit2
+  TrendingUp, RefreshCw, Trash2, X, Edit2, Shield, User as UserIcon
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
   ResponsiveContainer, Cell 
 } from 'recharts';
 
-// --- DEFINICIONES ---
+// --- TIPOS ---
 
 type Role = 'admin' | 'user';
 type TaskStatus = 'pending' | 'accepted' | 'completed';
@@ -46,6 +46,8 @@ interface BusinessHours {
   [key: number]: { active: boolean; start: string; end: string; };
 }
 
+// --- CONSTANTES ---
+
 const INITIAL_HOURS: BusinessHours = {
   0: { active: false, start: "09:00", end: "17:00" },
   1: { active: true, start: "09:00", end: "17:00" },
@@ -54,6 +56,15 @@ const INITIAL_HOURS: BusinessHours = {
   4: { active: true, start: "09:00", end: "17:00" },
   5: { active: true, start: "09:00", end: "17:00" },
   6: { active: false, start: "09:00", end: "17:00" },
+};
+
+// Credenciales solicitadas por el usuario
+const DEFAULT_ADMIN: User = { 
+  id: 'admin-1', 
+  name: 'Administrador', 
+  username: 'Automa_5', 
+  password: '14569', 
+  role: 'admin' 
 };
 
 // --- UTILIDADES ---
@@ -82,7 +93,7 @@ const calculateWorkHours = (start: number, end: number, config: BusinessHours): 
   return totalMs / (1000 * 60 * 60);
 };
 
-// --- COMPONENTES DE VISTA ---
+// --- COMPONENTES ---
 
 const LoginPage = ({ users, onLogin }: { users: User[], onLogin: (u: string, p: string) => void }) => {
   const [username, setUsername] = useState('');
@@ -92,7 +103,7 @@ const LoginPage = ({ users, onLogin }: { users: User[], onLogin: (u: string, p: 
     <div className="min-h-screen flex items-center justify-center bg-[#0a0f1d] p-6 animate-in fade-in duration-700">
       <div className="max-w-md w-full bg-white/5 backdrop-blur-3xl rounded-[48px] border border-white/10 shadow-2xl overflow-hidden">
         <div className="p-12 text-center bg-gradient-to-b from-indigo-500/10 to-transparent">
-          <div className="w-20 h-20 bg-indigo-600 rounded-3xl mx-auto mb-8 flex items-center justify-center shadow-2xl shadow-indigo-500/40 rotate-3 transition-transform hover:rotate-0">
+          <div className="w-20 h-20 bg-indigo-600 rounded-3xl mx-auto mb-8 flex items-center justify-center shadow-2xl shadow-indigo-500/40 rotate-3">
              <CheckSquare size={40} className="text-white" />
           </div>
           <h1 className="text-4xl font-black text-white tracking-tighter mb-2">TaskFlow <span className="text-indigo-500">PRO</span></h1>
@@ -100,7 +111,7 @@ const LoginPage = ({ users, onLogin }: { users: User[], onLogin: (u: string, p: 
         </div>
         <form className="p-12 space-y-6" onSubmit={e => { e.preventDefault(); onLogin(username, password); }}>
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Seleccionar Usuario</label>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Perfil de Usuario</label>
             <select 
               className="w-full px-8 py-5 bg-white/5 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold appearance-none cursor-pointer"
               value={username}
@@ -109,7 +120,7 @@ const LoginPage = ({ users, onLogin }: { users: User[], onLogin: (u: string, p: 
             >
               <option value="" disabled className="bg-[#0a0f1d]">Elegir perfil...</option>
               {users.map(u => (
-                <option key={u.id} value={u.username} className="bg-[#0a0f1d]">{u.name} (@{u.username})</option>
+                <option key={u.id} value={u.username} className="bg-[#0a0f1d]">{u.name} ({u.role})</option>
               ))}
             </select>
           </div>
@@ -124,22 +135,12 @@ const LoginPage = ({ users, onLogin }: { users: User[], onLogin: (u: string, p: 
               required 
             />
           </div>
-          <button className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-5 rounded-2xl transition-all shadow-xl active:scale-95 shadow-indigo-600/20">ACCEDER AL PANEL</button>
+          <button className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-5 rounded-2xl transition-all shadow-xl active:scale-95 shadow-indigo-600/20">ACCEDER</button>
         </form>
       </div>
     </div>
   );
 };
-
-const StatCard = ({ label, value, color, icon }: any) => (
-  <div className="bg-white p-10 rounded-[40px] shadow-sm border border-slate-100 flex items-center gap-8 group hover:border-indigo-100 transition-all duration-300">
-    <div className={`p-6 rounded-[24px] ${color} text-white shadow-xl group-hover:scale-110 transition-transform`}>{icon}</div>
-    <div>
-      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{label}</p>
-      <p className="text-4xl font-black tracking-tighter text-slate-900">{value}</p>
-    </div>
-  </div>
-);
 
 const App = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -148,23 +149,26 @@ const App = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [view, setView] = useState('dashboard');
 
-  // Carga inicial
   useEffect(() => {
-    const saved = localStorage.getItem('tf_pro_v3_data');
+    const saved = localStorage.getItem('taskflow_v4_data');
     if (saved) {
       const d = JSON.parse(saved);
-      setUsers(d.users || []);
+      // Aseguramos que Automa_5 siempre exista si no hay otros administradores
+      const userList = d.users || [];
+      if (!userList.some((u: User) => u.username === 'Automa_5')) {
+        userList.push(DEFAULT_ADMIN);
+      }
+      setUsers(userList);
       setTasks(d.tasks || []);
       setBusinessHours(d.hours || INITIAL_HOURS);
     } else {
-      setUsers([{ id: 'admin-1', name: 'Automa_5', username: 'Automa_5', password: '14569', role: 'admin' }]);
+      setUsers([DEFAULT_ADMIN]);
     }
   }, []);
 
-  // Persistencia
   useEffect(() => {
     if (users.length > 0) {
-      localStorage.setItem('tf_pro_v3_data', JSON.stringify({ users, tasks, hours: businessHours }));
+      localStorage.setItem('taskflow_v4_data', JSON.stringify({ users, tasks, hours: businessHours }));
     }
   }, [users, tasks, businessHours]);
 
@@ -189,7 +193,7 @@ const App = () => {
     return <LoginPage users={users} onLogin={(u, p) => {
       const found = users.find(usr => usr.username === u && usr.password === p);
       if (found) setCurrentUser(found);
-      else alert('Credenciales incorrectas');
+      else alert('Usuario o contraseña incorrectos.');
     }} />;
   }
 
@@ -197,20 +201,19 @@ const App = () => {
 
   return (
     <div className="flex h-screen bg-[#f8fafc] text-slate-900 overflow-hidden font-sans">
-      {/* Sidebar Lateral */}
-      <aside className="w-80 bg-[#0f172a] text-white flex flex-col p-8 shrink-0 border-r border-white/5 shadow-2xl relative z-40">
+      <aside className="w-80 bg-[#0f172a] text-white flex flex-col p-8 shrink-0 border-r border-white/5 shadow-2xl z-40">
         <div className="flex items-center gap-4 mb-12">
           <div className="bg-indigo-600 p-2.5 rounded-xl shadow-lg rotate-3"><CheckSquare size={24} /></div>
           <span className="text-2xl font-black tracking-tighter uppercase">TaskFlow</span>
         </div>
         
         <nav className="flex-1 space-y-2">
-          <SidebarBtn active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<LayoutDashboard size={20}/>} label="Dashboard" />
-          <SidebarBtn active={view === 'tasks'} onClick={() => setView('tasks')} icon={<CheckSquare size={20}/>} label="Tareas" />
+          <SidebarItem active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<LayoutDashboard size={20}/>} label="Dashboard" />
+          <SidebarItem active={view === 'tasks'} onClick={() => setView('tasks')} icon={<CheckSquare size={20}/>} label="Tareas" />
           {currentUser.role === 'admin' && (
             <>
-              <SidebarBtn active={view === 'users'} onClick={() => setView('users')} icon={<Users size={20}/>} label="Usuarios" />
-              <SidebarBtn active={view === 'settings'} onClick={() => setView('settings')} icon={<Settings size={20}/>} label="Horarios" />
+              <SidebarItem active={view === 'users'} onClick={() => setView('users')} icon={<Users size={20}/>} label="Usuarios" />
+              <SidebarItem active={view === 'settings'} onClick={() => setView('settings')} icon={<Settings size={20}/>} label="Horarios" />
             </>
           )}
         </nav>
@@ -229,26 +232,43 @@ const App = () => {
         </div>
       </aside>
 
-      {/* Contenido Principal */}
-      <main className="flex-1 overflow-y-auto p-12 no-scrollbar bg-slate-50 relative z-30">
+      <main className="flex-1 overflow-y-auto p-12 no-scrollbar bg-slate-50 z-30">
         <header className="flex justify-between items-center mb-16">
           <h2 className="text-4xl font-black text-slate-900 tracking-tighter capitalize">{view}</h2>
           <div className="bg-white border border-slate-100 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Servidor en Línea
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Sistema en línea
           </div>
         </header>
 
         {view === 'dashboard' && (
           <div className="space-y-12 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <StatCard label="Pendientes" value={filteredTasks.filter(t => t.status === 'pending').length} color="bg-amber-500" icon={<Clock size={24}/>} />
-              <StatCard label="Proceso" value={filteredTasks.filter(t => t.status === 'accepted').length} color="bg-indigo-600" icon={<RefreshCw size={24}/>} />
-              <StatCard label="Finalizadas" value={filteredTasks.filter(t => t.status === 'completed').length} color="bg-emerald-500" icon={<CheckSquare size={24}/>} />
+              <div className="bg-white p-10 rounded-[40px] shadow-sm border border-slate-100 flex items-center gap-8">
+                <div className="p-6 rounded-[24px] bg-amber-500 text-white shadow-xl"><Clock size={24}/></div>
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Pendientes</p>
+                  <p className="text-4xl font-black text-slate-900">{filteredTasks.filter(t => t.status === 'pending').length}</p>
+                </div>
+              </div>
+              <div className="bg-white p-10 rounded-[40px] shadow-sm border border-slate-100 flex items-center gap-8">
+                <div className="p-6 rounded-[24px] bg-indigo-600 text-white shadow-xl"><RefreshCw size={24}/></div>
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">En Proceso</p>
+                  <p className="text-4xl font-black text-slate-900">{filteredTasks.filter(t => t.status === 'accepted').length}</p>
+                </div>
+              </div>
+              <div className="bg-white p-10 rounded-[40px] shadow-sm border border-slate-100 flex items-center gap-8">
+                <div className="p-6 rounded-[24px] bg-emerald-500 text-white shadow-xl"><CheckSquare size={24}/></div>
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Finalizadas</p>
+                  <p className="text-4xl font-black text-slate-900">{filteredTasks.filter(t => t.status === 'completed').length}</p>
+                </div>
+              </div>
             </div>
 
             {currentUser.role === 'admin' && efficiencyData.length > 0 && (
               <div className="bg-white p-12 rounded-[48px] shadow-sm border border-slate-100">
-                <h3 className="text-xl font-black mb-12 flex items-center gap-3 text-slate-800"><TrendingUp size={24} className="text-indigo-600"/> Eficiencia del Personal (%)</h3>
+                <h3 className="text-xl font-black mb-12 flex items-center gap-3 text-slate-800"><TrendingUp size={24} className="text-indigo-600"/> Eficiencia del Equipo (%)</h3>
                 <div className="h-[400px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={efficiencyData}>
@@ -280,13 +300,10 @@ const App = () => {
            <UsersView 
              users={users} 
              onAdd={(u:any) => setUsers([...users, {...u, id: Date.now().toString()}])}
-             onUpdate={(id:string, update:any) => {
-                setUsers(users.map(u => u.id === id ? { ...u, ...update } : u));
-                if (currentUser.id === id) setCurrentUser({ ...currentUser, ...update });
-             }}
+             onUpdate={(id:string, update:any) => setUsers(users.map(u => u.id === id ? { ...u, ...update } : u))}
              onDelete={(id:string) => {
                if(id === currentUser.id) return alert('No puedes eliminarte a ti mismo.');
-               if(confirm('¿Seguro que deseas eliminar este usuario?')) {
+               if(confirm('¿Seguro? Se borrarán sus tareas asociadas.')) {
                  setUsers(users.filter(u => u.id !== id));
                  setTasks(tasks.filter(t => t.assignedTo !== id));
                }
@@ -295,12 +312,12 @@ const App = () => {
         )}
 
         {view === 'settings' && (
-          <div className="bg-white p-12 rounded-[48px] shadow-sm border border-slate-100 max-w-4xl space-y-6 animate-in fade-in duration-500">
-            <h3 className="text-2xl font-black mb-8 text-slate-800">Configuración de Jornada</h3>
+          <div className="bg-white p-12 rounded-[48px] shadow-sm border border-slate-100 max-w-4xl space-y-6">
+            <h3 className="text-2xl font-black mb-8 text-slate-800">Horario de Trabajo</h3>
             {Object.entries(businessHours).map(([day, config]) => (
-              <div key={day} className={`flex items-center justify-between p-6 rounded-[32px] border transition-all duration-300 ${config.active ? 'bg-slate-50 border-slate-100' : 'opacity-30 grayscale border-transparent'}`}>
+              <div key={day} className={`flex items-center justify-between p-6 rounded-[32px] border transition-all duration-300 ${config.active ? 'bg-slate-50' : 'opacity-30 grayscale'}`}>
                 <div className="flex items-center gap-6">
-                  <input type="checkbox" checked={config.active} onChange={e => setBusinessHours({...businessHours, [day]: {...config, active: e.target.checked}})} className="w-6 h-6 rounded-lg accent-indigo-600 cursor-pointer" />
+                  <input type="checkbox" checked={config.active} onChange={e => setBusinessHours({...businessHours, [day]: {...config, active: e.target.checked}})} className="w-6 h-6 rounded-lg accent-indigo-600" />
                   <span className="font-black uppercase text-xs tracking-widest w-24">Día {day}</span>
                 </div>
                 <div className="flex gap-4">
@@ -316,75 +333,50 @@ const App = () => {
   );
 };
 
-const SidebarBtn = ({ active, onClick, icon, label }: any) => (
+const SidebarItem = ({ active, onClick, icon, label }: any) => (
   <button onClick={onClick} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all duration-300 ${active ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/30' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'}`}>
     {icon} <span className="font-bold">{label}</span>
   </button>
 );
 
 const UsersView = ({ users, onAdd, onUpdate, onDelete }: any) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [f, setF] = useState({ name: '', username: '', password: '', role: 'user' });
+  const [modal, setModal] = useState({ open: false, editing: null as string | null });
+  const [f, setF] = useState({ name: '', username: '', password: '', role: 'user' as Role });
 
-  const openAddModal = () => {
-    setEditingId(null);
-    setF({ name: '', username: '', password: '', role: 'user' });
-    setIsModalOpen(true);
-  };
-
-  const openEditModal = (user: User) => {
-    setEditingId(user.id);
-    setF({ 
-      name: user.name, 
-      username: user.username, 
-      password: user.password || '', 
-      role: user.role 
-    });
-    setIsModalOpen(true);
-  };
-
-  const handleSubmit = () => {
-    if (!f.name || !f.username || !f.password) return alert('Todos los campos son obligatorios.');
-    if (editingId) {
-      onUpdate(editingId, f);
+  const handleOpen = (user?: User) => {
+    if (user) {
+      setModal({ open: true, editing: user.id });
+      setF({ name: user.name, username: user.username, password: user.password || '', role: user.role });
     } else {
-      onAdd(f);
+      setModal({ open: true, editing: null });
+      setF({ name: '', username: '', password: '', role: 'user' });
     }
-    setIsModalOpen(false);
+  };
+
+  const handleSave = () => {
+    if (!f.name || !f.username || !f.password) return alert('Campos incompletos');
+    if (modal.editing) onUpdate(modal.editing, f);
+    else onAdd(f);
+    setModal({ open: false, editing: null });
   };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h3 className="text-2xl font-black tracking-tighter text-slate-900">Control de Miembros</h3>
-          <p className="text-slate-400 font-medium text-sm">Gestiona accesos y roles del equipo</p>
-        </div>
-        <button onClick={openAddModal} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2">
-          <Plus size={20}/> NUEVO MIEMBRO
+      <div className="flex justify-between items-center">
+        <h3 className="text-2xl font-black text-slate-900 tracking-tighter">Miembros del Equipo</h3>
+        <button onClick={() => handleOpen()} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2">
+          <Plus size={20}/> NUEVO USUARIO
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {users.map((u:any) => (
-          <div key={u.id} className="bg-white p-10 rounded-[48px] border border-slate-100 text-center flex flex-col items-center shadow-sm relative group overflow-hidden">
+        {users.map((u:User) => (
+          <div key={u.id} className="bg-white p-10 rounded-[48px] border border-slate-100 text-center flex flex-col items-center shadow-sm relative group">
             <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button 
-                onClick={() => openEditModal(u)}
-                className="p-3 bg-indigo-50 text-indigo-500 rounded-2xl hover:bg-indigo-500 hover:text-white transition-colors"
-                >
-                <Edit2 size={18} />
-                </button>
-                <button 
-                onClick={() => onDelete(u.id)}
-                className="p-3 bg-red-50 text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-colors"
-                >
-                <Trash2 size={18} />
-                </button>
+              <button onClick={() => handleOpen(u)} className="p-3 bg-indigo-50 text-indigo-500 rounded-2xl hover:bg-indigo-500 hover:text-white transition-colors"><Edit2 size={16}/></button>
+              <button onClick={() => onDelete(u.id)} className="p-3 bg-red-50 text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-colors"><Trash2 size={16}/></button>
             </div>
-            
-            <div className={`w-20 h-20 rounded-[28px] flex items-center justify-center font-black text-2xl mb-6 shadow-xl ${u.role === 'admin' ? 'bg-indigo-600 text-white shadow-indigo-500/30' : 'bg-slate-100 text-slate-400 shadow-slate-200'}`}>{u.name[0]}</div>
+            <div className={`w-20 h-20 rounded-[28px] flex items-center justify-center font-black text-2xl mb-6 shadow-xl ${u.role === 'admin' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{u.name[0]}</div>
             <p className="font-black text-xl mb-1">{u.name}</p>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">@{u.username}</p>
             <div className={`px-6 py-2 rounded-full text-[9px] font-black uppercase tracking-widest ${u.role === 'admin' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-500'}`}>{u.role}</div>
@@ -392,35 +384,21 @@ const UsersView = ({ users, onAdd, onUpdate, onDelete }: any) => {
         ))}
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl flex items-center justify-center p-8 z-[60] animate-in fade-in duration-300">
+      {modal.open && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl flex items-center justify-center p-8 z-[60]">
           <div className="bg-white p-12 rounded-[56px] w-full max-w-md shadow-2xl relative">
-             <button onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500"><X size={24}/></button>
-             <h3 className="text-3xl font-black tracking-tighter mb-8">{editingId ? 'Editar Usuario' : 'Crear Usuario'}</h3>
+             <button onClick={() => setModal({open: false, editing: null})} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500"><X size={24}/></button>
+             <h3 className="text-3xl font-black mb-8 tracking-tighter">{modal.editing ? 'Editar' : 'Crear'} Usuario</h3>
              <div className="space-y-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Nombre Completo</label>
-                  <input type="text" placeholder="Ej: Juan Pérez" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.name} onChange={e => setF({...f, name: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Nombre de Usuario</label>
-                  <input type="text" placeholder="Ej: jperez" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.username} onChange={e => setF({...f, username: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Contraseña</label>
-                  <input type="password" placeholder="••••••••" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.password} onChange={e => setF({...f, password: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Rol en Sistema</label>
-                  <select className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={f.role} onChange={e => setF({...f, role: e.target.value as any})}>
-                      <option value="user">Colaborador (User)</option>
-                      <option value="admin">Administrador (Admin)</option>
-                  </select>
-                </div>
+                <input placeholder="Nombre Completo" className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-bold" value={f.name} onChange={e => setF({...f, name: e.target.value})} />
+                <input placeholder="Usuario (Login)" className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-bold" value={f.username} onChange={e => setF({...f, username: e.target.value})} />
+                <input type="password" placeholder="Contraseña" className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-bold" value={f.password} onChange={e => setF({...f, password: e.target.value})} />
+                <select className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-bold" value={f.role} onChange={e => setF({...f, role: e.target.value as Role})}>
+                    <option value="user">USER (Colaborador)</option>
+                    <option value="admin">ADMIN (Administrador)</option>
+                </select>
              </div>
-             <button onClick={handleSubmit} className="w-full bg-indigo-600 text-white py-5 rounded-3xl font-black shadow-xl shadow-indigo-600/30 mt-10 hover:bg-indigo-700 active:scale-95 transition-all uppercase tracking-widest text-sm">
-                {editingId ? 'GUARDAR CAMBIOS' : 'AÑADIR AL EQUIPO'}
-             </button>
+             <button onClick={handleSave} className="w-full bg-indigo-600 text-white py-5 rounded-3xl font-black mt-10 shadow-xl shadow-indigo-600/30 uppercase text-xs tracking-widest">GUARDAR</button>
           </div>
         </div>
       )}
@@ -429,20 +407,21 @@ const UsersView = ({ users, onAdd, onUpdate, onDelete }: any) => {
 };
 
 const TasksList = ({ user, tasks, users, onUpdate, onDelete, onAdd }: any) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modal, setModal] = useState(false);
   const [noteContent, setNoteContent] = useState('');
   const [f, setF] = useState({ title: '', description: '', assignedTo: '', estimatedHours: 1 });
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       {user.role === 'admin' && (
-        <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2">
-          <Plus size={20}/> NUEVA ASIGNACIÓN
+        <button onClick={() => setModal(true)} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2">
+          <Plus size={20}/> NUEVA TAREA
         </button>
       )}
+
       <div className="grid grid-cols-1 gap-6">
-        {tasks.map((t: any) => (
-          <div key={t.id} className="bg-white p-10 rounded-[40px] border border-slate-100 shadow-sm flex flex-col hover:shadow-md transition-shadow relative overflow-hidden group">
+        {tasks.map((t: Task) => (
+          <div key={t.id} className="bg-white p-10 rounded-[40px] border border-slate-100 shadow-sm flex flex-col relative group overflow-hidden">
              <div className="flex justify-between items-start mb-6">
                <div className="flex-1">
                   <div className="flex items-center gap-3 mb-4">
@@ -450,29 +429,25 @@ const TasksList = ({ user, tasks, users, onUpdate, onDelete, onAdd }: any) => {
                       {t.status}
                     </span>
                     <span className="text-[9px] font-black text-slate-300 uppercase">EST: {t.estimatedHours}H</span>
-                    {user.role === 'admin' && (
-                      <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">
-                        → {users.find((u:any)=>u.id === t.assignedTo)?.name}
-                      </span>
-                    )}
+                    <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">→ {users.find((u:any)=>u.id === t.assignedTo)?.name || 'Sin asignar'}</span>
                   </div>
-                  <h4 className="text-2xl font-black text-slate-900 tracking-tight leading-none group-hover:text-indigo-600 transition-colors">{t.title}</h4>
+                  <h4 className="text-2xl font-black text-slate-900 tracking-tight leading-none">{t.title}</h4>
                   <p className="text-slate-500 mt-4 leading-relaxed font-medium">{t.description}</p>
                </div>
                {user.role === 'admin' && (
-                 <button onClick={() => confirm('¿Eliminar tarea?') && onDelete(t.id)} className="text-slate-200 hover:text-red-500 p-2 transition-colors"><Trash2 size={22}/></button>
+                 <button onClick={() => confirm('¿Borrar tarea?') && onDelete(t.id)} className="text-slate-200 hover:text-red-500 p-2 transition-colors"><Trash2 size={22}/></button>
                )}
              </div>
              
              {user.role === 'user' && t.status !== 'completed' && (
                <div className="mt-8 pt-8 border-t border-slate-50 flex flex-wrap gap-4">
                  {t.status === 'pending' ? (
-                   <button onClick={() => onUpdate(t.id, {status: 'accepted', acceptedAt: Date.now()})} className="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl shadow-indigo-600/20 active:scale-95 transition-all uppercase text-xs tracking-widest">ACEPTAR TAREA</button>
+                   <button onClick={() => onUpdate(t.id, {status: 'accepted', acceptedAt: Date.now()})} className="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl uppercase text-xs tracking-widest">EMPEZAR</button>
                  ) : (
                    <div className="flex-1 flex gap-4 min-w-[300px]">
-                      <input className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all" placeholder="Escribe un avance o nota..." value={noteContent} onChange={e => setNoteContent(e.target.value)} />
+                      <input className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all" placeholder="Escribir avance..." value={noteContent} onChange={e => setNoteContent(e.target.value)} />
                       <button onClick={() => { if(noteContent) { onUpdate(t.id, {notes: [...t.notes, {id: Date.now().toString(), text: noteContent, timestamp: Date.now()}]}); setNoteContent(''); } }} className="bg-slate-900 text-white px-6 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest">NOTAR</button>
-                      <button onClick={() => t.notes.length > 0 ? onUpdate(t.id, {status: 'completed', completedAt: Date.now()}) : alert('Debes agregar al menos una nota de avance para finalizar.')} className="bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-emerald-600/20">FINALIZAR</button>
+                      <button onClick={() => t.notes.length > 0 ? onUpdate(t.id, {status: 'completed', completedAt: Date.now()}) : alert('Debes agregar una nota de avance.')} className="bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl">TERMINAR</button>
                    </div>
                  )}
                </div>
@@ -480,7 +455,7 @@ const TasksList = ({ user, tasks, users, onUpdate, onDelete, onAdd }: any) => {
 
              {t.notes.length > 0 && (
                <div className="mt-10 space-y-3">
-                 <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest px-2">Historial de Avance</p>
+                 <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest px-2">Bitácora</p>
                  {t.notes.map((n:any) => (
                    <div key={n.id} className="bg-slate-50/50 p-5 rounded-3xl text-sm font-bold text-slate-700 flex justify-between items-center border border-slate-100/50">
                      <span>{n.text}</span> 
@@ -492,55 +467,41 @@ const TasksList = ({ user, tasks, users, onUpdate, onDelete, onAdd }: any) => {
           </div>
         ))}
         {tasks.length === 0 && (
-          <div className="py-20 text-center bg-white rounded-[40px] border border-dashed border-slate-200">
-            <p className="text-slate-400 font-bold">No hay tareas registradas</p>
-          </div>
+          <div className="py-20 text-center bg-white rounded-[40px] border border-dashed border-slate-200 text-slate-400 font-bold">No hay tareas.</div>
         )}
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl flex items-center justify-center p-8 z-[60] animate-in fade-in duration-300">
+      {modal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl flex items-center justify-center p-8 z-[60]">
           <div className="bg-white p-12 rounded-[56px] w-full max-w-2xl shadow-2xl relative">
-             <button onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500"><X size={24}/></button>
-             <h3 className="text-3xl font-black tracking-tighter mb-8 text-slate-900">Nueva Asignación</h3>
+             <button onClick={() => setModal(false)} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500"><X size={24}/></button>
+             <h3 className="text-3xl font-black mb-8 text-slate-900 tracking-tighter">Asignar Tarea</h3>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Título de la Tarea</label>
-                    <input type="text" placeholder="Ej: Reporte Mensual" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.title} onChange={e => setF({...f, title: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Descripción de Objetivos</label>
-                    <textarea placeholder="Detalles de la labor..." className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-medium h-32 outline-none focus:ring-2 focus:ring-indigo-500 resize-none" value={f.description} onChange={e => setF({...f, description: e.target.value})} />
-                  </div>
+                  <input placeholder="Título" className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-bold" value={f.title} onChange={e => setF({...f, title: e.target.value})} />
+                  <textarea placeholder="Descripción..." className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-medium h-32 resize-none" value={f.description} onChange={e => setF({...f, description: e.target.value})} />
                 </div>
                 <div className="space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Tiempo Estimado (Hrs)</label>
-                    <input type="number" placeholder="Ej: 5" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.estimatedHours} onChange={e => setF({...f, estimatedHours: Number(e.target.value)})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Colaborador Asignado</label>
-                    <select className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={f.assignedTo} onChange={e => setF({...f, assignedTo: e.target.value})}>
-                        <option value="" disabled>Seleccionar miembro...</option>
-                        {users.map((u:any) => (
-                          <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-                        ))}
-                    </select>
-                  </div>
+                  <input type="number" placeholder="Horas" className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-bold" value={f.estimatedHours} onChange={e => setF({...f, estimatedHours: Number(e.target.value)})} />
+                  <select className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-bold" value={f.assignedTo} onChange={e => setF({...f, assignedTo: e.target.value})}>
+                      <option value="" disabled>Asignar a...</option>
+                      {users.map((u:any) => (
+                        <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                      ))}
+                  </select>
                 </div>
              </div>
              <button 
                 onClick={() => { 
                   if(f.title && f.assignedTo) {
                     onAdd(f); 
-                    setIsModalOpen(false); 
+                    setModal(false); 
                     setF({title:'',description:'',assignedTo:'',estimatedHours:1});
-                  } else alert('Título y Usuario son obligatorios.');
+                  } else alert('Título y Asignado son obligatorios.');
                 }} 
-                className="w-full bg-indigo-600 text-white py-5 rounded-3xl font-black shadow-xl shadow-indigo-600/30 mt-10 hover:bg-indigo-700 active:scale-95 transition-all uppercase tracking-widest text-sm"
+                className="w-full bg-indigo-600 text-white py-5 rounded-3xl font-black shadow-xl mt-10 uppercase tracking-widest text-sm"
               >
-                PUBLICAR ASIGNACIÓN
+                PUBLICAR TAREA
               </button>
           </div>
         </div>
@@ -549,9 +510,4 @@ const TasksList = ({ user, tasks, users, onUpdate, onDelete, onAdd }: any) => {
   );
 };
 
-// --- RENDERIZADO FINAL ---
-
-const rootElement = document.getElementById('root');
-if (rootElement) {
-  ReactDOM.createRoot(rootElement).render(<App />);
-}
+ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
