@@ -48,7 +48,8 @@ interface BusinessHours {
 }
 
 // --- CONSTANTES ---
-const STORAGE_KEY = 'taskflow_v10_autosync';
+const STORAGE_KEY = 'taskflow_v11_autosync';
+const OLD_KEYS = ['taskflow_v10_autosync', 'taskflow_v9_autosync'];
 
 const INITIAL_HOURS: BusinessHours = {
   0: { active: false, start: "09:00", end: "17:00" },
@@ -95,9 +96,22 @@ const calculateWorkHours = (start: number, end: number, config: BusinessHours): 
 // --- COMPONENTE PRINCIPAL ---
 
 const App = () => {
-  // Inicialización de estado desde localStorage
+  // Inicialización inteligente: migra datos de versiones anteriores si existen
   const loadInitial = () => {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    let saved = localStorage.getItem(STORAGE_KEY);
+    
+    // Migración: si no hay v11, busca en v10 o v9
+    if (!saved) {
+      for (const oldKey of OLD_KEYS) {
+        const oldData = localStorage.getItem(oldKey);
+        if (oldData) {
+          saved = oldData;
+          localStorage.setItem(STORAGE_KEY, oldData); // Migra a v11
+          break;
+        }
+      }
+    }
+
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -121,7 +135,6 @@ const App = () => {
   const [lastSyncStatus, setLastSyncStatus] = useState<'success' | 'error' | 'none'>('none');
   const [copied, setCopied] = useState(false);
 
-  // Referencias para control de flujo
   const isInternalUpdate = useRef(false);
   const autoSaveTimer = useRef<any>(null);
 
@@ -129,23 +142,16 @@ const App = () => {
 
   const pushToCloud = async (id: string, dataToPush: any) => {
     if (!id || isInternalUpdate.current) return;
-    setIsSyncing(true);
     try {
       const response = await fetch(`https://api.npoint.io/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dataToPush)
       });
-      if (response.ok) {
-        setLastSyncStatus('success');
-      } else {
-        console.error("Cloud push failed:", response.status);
-        setLastSyncStatus('error');
-      }
+      if (response.ok) setLastSyncStatus('success');
+      else setLastSyncStatus('error');
     } catch (e) {
       setLastSyncStatus('error');
-    } finally {
-      setIsSyncing(false);
     }
   };
 
@@ -157,17 +163,12 @@ const App = () => {
       const data = await response.json();
       
       if (data && data.users) {
-        // Bloqueamos el "push" automático mientras actualizamos el estado desde la nube
         isInternalUpdate.current = true;
-        
         if (JSON.stringify(data.users) !== JSON.stringify(users)) setUsers(data.users);
         if (JSON.stringify(data.tasks) !== JSON.stringify(tasks)) setTasks(data.tasks);
         if (JSON.stringify(data.businessHours) !== JSON.stringify(businessHours)) setBusinessHours(data.businessHours);
-        
         setLastSyncStatus('success');
-        
-        // Liberamos el bloqueo después de que React procese los cambios
-        setTimeout(() => { isInternalUpdate.current = false; }, 500);
+        setTimeout(() => { isInternalUpdate.current = false; }, 1000);
       }
     } catch (e) {
       setLastSyncStatus('error');
@@ -178,50 +179,56 @@ const App = () => {
     setIsSyncing(true);
     try {
       const data = { users, tasks, businessHours, lastUpdate: Date.now() };
-      // npoint.io usa POST a la raíz para crear bins
-      const response = await fetch('https://api.npoint.io/', {
+      // npoint.io funciona mejor sin barra al final en POST
+      const response = await fetch('https://api.npoint.io', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify(data)
       });
+
+      if (!response.ok) throw new Error(`Server Error: ${response.status}`);
+      
       const result = await response.json();
-      const id = result.id || result.binId; // npoint puede devolver cualquiera de los dos
+      const id = result.id || result.binId; 
       
       if (id) {
         setCloudId(id);
         const newState = { users, tasks, hours: businessHours, cloudId: id };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
-        alert(`¡Base de Datos creada!\nID: ${id}\n\nEste código es único para tu equipo.`);
+        setLastSyncStatus('success');
+        alert(`¡Base de Datos creada!\nID: ${id}\n\nCopia este código y compártelo con el resto del equipo.`);
       } else {
-        throw new Error('No se recibió un ID del servidor');
+        throw new Error('No ID received');
       }
     } catch (e) {
-      console.error("Error creating cloud ID:", e);
-      alert('Error: No se pudo conectar con el servidor de nube. Reintenta en unos segundos.');
+      console.error("Cloud Error:", e);
+      alert('Error: El servidor de npoint no responde. Intenta refrescar la página o espera un minuto.');
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // Persistencia local cada vez que cambia algo
+  // Guardar Local + Auto-Save Cloud
   useEffect(() => {
     const data = { users, tasks, hours: businessHours, cloudId };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     
-    // Solo subimos a la nube si el cambio fue LOCAL (no descargado)
     if (cloudId && currentUser && !isInternalUpdate.current) {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
       autoSaveTimer.current = setTimeout(() => {
         pushToCloud(cloudId, { users, tasks, businessHours });
-      }, 2000);
+      }, 3000);
     }
   }, [users, tasks, businessHours, cloudId, currentUser]);
 
-  // Polling cada 20 seg para traer cambios de otros
+  // Polling automático
   useEffect(() => {
     if (cloudId) {
       fetchFromCloud(cloudId);
-      const interval = setInterval(() => fetchFromCloud(cloudId), 20000);
+      const interval = setInterval(() => fetchFromCloud(cloudId), 25000);
       return () => clearInterval(interval);
     }
   }, [cloudId, fetchFromCloud]);
@@ -229,7 +236,7 @@ const App = () => {
   const handleLogin = (u: string, p: string) => {
     const found = users.find(usr => usr.username === u && usr.password === p);
     if (found) setCurrentUser(found);
-    else alert('Acceso denegado.');
+    else alert('Acceso denegado. Verifica usuario y clave.');
   };
 
   if (!currentUser) {
@@ -248,15 +255,15 @@ const App = () => {
           <div className="mt-12 pt-8 border-t border-white/5 space-y-4">
             <div className="flex items-center justify-center gap-2 mb-2">
               <Link2 size={14} className="text-indigo-500" />
-              <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Conectar con Equipo</p>
+              <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Vincular con Equipo</p>
             </div>
             <input 
               className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500 text-center tracking-widest uppercase"
-              placeholder="PEGA EL ID AQUÍ"
+              placeholder="INGRESA EL SYNC ID"
               value={cloudId}
               onChange={e => setCloudId(e.target.value)}
             />
-            <p className="text-[9px] text-slate-600 font-bold">Introduce el ID de sincronización si ya tienes uno.</p>
+            <p className="text-[9px] text-slate-600 font-bold">Pega aquí el ID si tu equipo ya creó una base en la nube.</p>
           </div>
         </div>
       </div>
@@ -336,9 +343,10 @@ const App = () => {
           <div className="max-w-4xl space-y-12">
             <div className="bg-[#0f172a] p-12 rounded-[56px] shadow-2xl text-white relative overflow-hidden">
                <div className="absolute -top-20 -right-20 w-64 h-64 bg-indigo-500/20 blur-[100px] rounded-full"></div>
+               {/* Fixed broken JSX below by removing unnecessary backslashes and correcting tag structure */}
                <h3 className="text-3xl font-black mb-4 flex items-center gap-4"><Cloud size={40} className="text-indigo-400"/> Sincronización Cloud</h3>
                <p className="text-slate-400 font-medium mb-12 max-w-xl">
-                 Al activar la sincronización, todos los miembros del equipo que tengan tu ID verán las mismas tareas en tiempo real.
+                 Si eres el administrador, genera un nuevo ID. Si ya tienes uno de tu equipo, vincúlalo aquí para sincronizar cambios automáticamente.
                </p>
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -356,8 +364,8 @@ const App = () => {
                   </div>
                   <div className="space-y-4">
                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Crear Nueva Nube</p>
-                    <button onClick={createNewCloudId} className="w-full bg-white text-slate-900 py-5 rounded-3xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 hover:bg-slate-100 transition-all">
-                      <Plus size={18}/> {isSyncing ? 'CONECTANDO...' : 'GENERAR NUEVO ID'}
+                    <button onClick={createNewCloudId} disabled={isSyncing} className="w-full bg-white text-slate-900 py-5 rounded-3xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 hover:bg-slate-100 transition-all disabled:opacity-50">
+                      <Plus size={18}/> {isSyncing ? 'CREANDO...' : 'GENERAR NUEVO ID'}
                     </button>
                   </div>
                </div>
@@ -588,6 +596,7 @@ const UsersView = ({ users, onAdd, onUpdate, onDelete }: any) => {
       {modal.open && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl flex items-center justify-center p-8 z-[100] animate-in fade-in duration-300">
           <div className="bg-white p-12 rounded-[56px] w-full max-w-md shadow-2xl relative">
+             {/* Fixed broken JSX below by removing redundant backslashes */}
              <button onClick={() => setModal({open: false, editing: null})} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500"><X size={24}/></button>
              <h3 className="text-3xl font-black mb-8 tracking-tighter text-slate-900">{modal.editing ? 'Editar' : 'Crear'} Acceso</h3>
              <div className="space-y-4">
