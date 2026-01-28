@@ -1,49 +1,33 @@
 
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TaskFlow Pro</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Babel Standalone: Permite que el navegador traduzca .tsx en tiempo real. 
-         Es la solución más fácil para subir archivos directamente a GitHub Pages. -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.tsx';
 
-    <style>
-        body { font-family: 'Inter', sans-serif; }
-        .loading-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
-    </style>
+/**
+ * TaskFlow Pro Entry Point
+ * Este archivo es procesado en tiempo real por Babel en el navegador.
+ */
 
-    <script type="importmap">
-    {
-      "imports": {
-        "react": "https://esm.sh/react@^19.2.4",
-        "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-        "react/": "https://esm.sh/react@^19.2.4/",
-        "recharts": "https://esm.sh/recharts@^3.7.0",
-        "lucide-react": "https://esm.sh/lucide-react@^0.563.0"
-      }
+try {
+    const rootElement = document.getElementById('root');
+    if (!rootElement) {
+        throw new Error("No se encontró el elemento raíz 'root' en el HTML.");
     }
-    </script>
-<link rel="stylesheet" href="/index.css">
-</head>
-<body class="bg-slate-900 text-slate-100 overflow-hidden">
-    <div id="root">
-        <!-- Pantalla de carga inicial mientras Babel procesa el código -->
-        <div class="flex flex-col items-center justify-center h-screen bg-slate-950">
-            <div class="w-16 h-16 bg-indigo-600 rounded-2xl mb-6 loading-pulse shadow-2xl shadow-indigo-500/50"></div>
-            <p class="text-xs font-black uppercase tracking-[0.3em] text-slate-500 loading-pulse">Iniciando TaskFlow Pro...</p>
-        </div>
-    </div>
 
-    <!-- Cargamos el archivo index.tsx. 
-         - type="text/babel" le dice a Babel que traduzca este archivo.
-         - data-type="module" le permite usar la importmap que definimos arriba. -->
-    <script type="text/babel" data-type="module" src="index.tsx"></script>
-<script type="module" src="/index.tsx"></script>
-</body>
-</html>
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(
+        <React.StrictMode>
+            <App />
+        </React.StrictMode>
+    );
+} catch (error) {
+    console.error("Fallo crítico en el renderizado:", error);
+    // Intentamos mostrar el error en la UI de carga si es posible
+    const msgEl = document.getElementById('error-message');
+    if (msgEl) {
+        document.getElementById('loading-ui').style.display = 'none';
+        document.getElementById('error-display').style.display = 'block';
+        msgEl.textContent = error instanceof Error ? error.message : String(error);
+    }
+}
+
