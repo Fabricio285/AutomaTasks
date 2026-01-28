@@ -3,7 +3,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { 
   LayoutDashboard, CheckSquare, Users, Settings, LogOut, Plus, Clock, 
-  TrendingUp, RefreshCw, Trash2, X, Edit2, Database, Download, Cloud, Info, ExternalLink, ChevronRight
+  TrendingUp, RefreshCw, Trash2, X, Edit2, Database, Download, Cloud, Info, 
+  Upload, ChevronRight, AlertCircle, FileJson
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -60,7 +61,7 @@ const INITIAL_HOURS: BusinessHours = {
 
 const DEFAULT_ADMIN: User = { 
   id: 'admin-1', 
-  name: 'Administrador', 
+  name: 'Automa_5 Admin', 
   username: 'Automa_5', 
   password: '14569', 
   role: 'admin' 
@@ -115,18 +116,18 @@ const LoginPage = ({ users, onLogin }: { users: User[], onLogin: (u: string, p: 
              <CheckSquare size={40} className="text-white" />
           </div>
           <h1 className="text-4xl font-black text-white tracking-tighter mb-2">TaskFlow <span className="text-indigo-500">PRO</span></h1>
-          <p className="text-slate-500 font-bold text-sm uppercase tracking-widest">Acceso al Sistema</p>
+          <p className="text-slate-500 font-bold text-sm uppercase tracking-widest">Acceso Restringido</p>
         </div>
         <form className="p-12 space-y-6" onSubmit={e => { e.preventDefault(); onLogin(username, password); }}>
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Perfil de Usuario</label>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Perfil</label>
             <select 
               className="w-full px-8 py-5 bg-white/5 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold appearance-none cursor-pointer"
               value={username}
               onChange={e => setUsername(e.target.value)}
               required
             >
-              <option value="" disabled className="bg-[#0a0f1d]">Seleccionar perfil...</option>
+              <option value="" disabled className="bg-[#0a0f1d]">Selecciona tu usuario...</option>
               {users.map(u => (
                 <option key={u.id} value={u.username} className="bg-[#0a0f1d]">{u.name} (@{u.username})</option>
               ))}
@@ -143,7 +144,7 @@ const LoginPage = ({ users, onLogin }: { users: User[], onLogin: (u: string, p: 
               required 
             />
           </div>
-          <button className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-5 rounded-2xl transition-all shadow-xl active:scale-95 shadow-indigo-600/20">ENTRAR AL PANEL</button>
+          <button className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-5 rounded-2xl transition-all shadow-xl active:scale-95 shadow-indigo-600/20">ENTRAR</button>
         </form>
       </div>
     </div>
@@ -158,9 +159,10 @@ const App = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [view, setView] = useState('dashboard');
   const [isSyncing, setIsSyncing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem('taskflow_v5_data');
+    const saved = localStorage.getItem('taskflow_v6_data');
     if (saved) {
       const d = JSON.parse(saved);
       let userList = d.users || [];
@@ -178,45 +180,68 @@ const App = () => {
 
   useEffect(() => {
     if (users.length > 0) {
-      localStorage.setItem('taskflow_v5_data', JSON.stringify({ 
-        users, 
-        tasks, 
-        hours: businessHours,
-        syncUrl 
-      }));
+      localStorage.setItem('taskflow_v6_data', JSON.stringify({ users, tasks, hours: businessHours, syncUrl }));
     }
   }, [users, tasks, businessHours, syncUrl]);
 
   const fetchCloudData = async () => {
-    if (!syncUrl) return alert('Ingresa un enlace de Drive primero.');
+    if (!syncUrl) return alert('Configura un enlace de Google Drive en Configuración.');
     setIsSyncing(true);
     try {
-      const fetchUrl = convertDriveLink(syncUrl);
-      const response = await fetch(fetchUrl);
-      if (!response.ok) throw new Error('Error al conectar con Drive');
-      const data = await response.json();
+      const directLink = convertDriveLink(syncUrl);
+      // Usamos AllOrigins para saltar CORS en el navegador
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(directLink)}`;
+      
+      const response = await fetch(proxyUrl);
+      if (!response.ok) throw new Error('Error de conexión');
+      
+      const resJson = await response.json();
+      const data = JSON.parse(resJson.contents);
+
       if (data.users && data.tasks) {
         setUsers(data.users);
         setTasks(data.tasks);
         if (data.businessHours) setBusinessHours(data.businessHours);
-        alert('Sincronización exitosa.');
+        alert('Sincronización con Drive exitosa.');
+      } else {
+        throw new Error('Formato de archivo inválido');
       }
     } catch (error) {
       console.error(error);
-      alert('Error al sincronizar datos.');
+      alert('Error al sincronizar: Verifica que el archivo en Drive sea público (Cualquier persona con el enlace).');
     } finally {
       setIsSyncing(false);
     }
   };
 
-  const exportData = () => {
-    const data = { users, tasks, businessHours, syncUrl, date: new Date().toISOString() };
+  const exportDB = () => {
+    const data = { users, tasks, businessHours, syncUrl, timestamp: Date.now() };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `taskflow_backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = 'database.json';
     a.click();
+  };
+
+  const importDB = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (data.users && data.tasks) {
+          setUsers(data.users);
+          setTasks(data.tasks);
+          if (data.businessHours) setBusinessHours(data.businessHours);
+          alert('Base de datos cargada correctamente.');
+        }
+      } catch (err) {
+        alert('Error: El archivo no es un JSON de TaskFlow válido.');
+      }
+    };
+    reader.readAsText(file);
   };
 
   const efficiencyData = useMemo(() => {
@@ -240,7 +265,7 @@ const App = () => {
     return <LoginPage users={users} onLogin={(u, p) => {
       const found = users.find(usr => usr.username === u && usr.password === p);
       if (found) setCurrentUser(found);
-      else alert('Credenciales incorrectas');
+      else alert('Usuario o contraseña incorrectos.');
     }} />;
   }
 
@@ -274,7 +299,7 @@ const App = () => {
             </div>
           </div>
           <button onClick={() => setCurrentUser(null)} className="w-full flex items-center gap-3 px-6 py-4 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-2xl transition-all font-bold">
-            <LogOut size={18} /> <span>Salir</span>
+            <LogOut size={18} /> <span>Cerrar Sesión</span>
           </button>
         </div>
       </aside>
@@ -284,12 +309,12 @@ const App = () => {
           <h2 className="text-4xl font-black text-slate-900 tracking-tighter capitalize">{view}</h2>
           <div className="flex items-center gap-4">
              {syncUrl && (
-               <button onClick={fetchCloudData} className="bg-white border px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 flex items-center gap-2">
-                  <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} /> Sincronizar Drive
+               <button onClick={fetchCloudData} className="bg-white border px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 flex items-center gap-2 shadow-sm transition-all">
+                  <RefreshCw size={14} className={isSyncing ? 'animate-spin text-indigo-500' : ''} /> {isSyncing ? 'Sincronizando...' : 'Actualizar Drive'}
                </button>
              )}
              <div className="bg-white border border-slate-100 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 shadow-sm">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> {currentUser.role.toUpperCase()} ACTIVO
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Sistema Online
              </div>
           </div>
         </header>
@@ -297,14 +322,14 @@ const App = () => {
         {view === 'dashboard' && (
           <div className="space-y-12 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <StatCard label="Pendientes" value={filteredTasks.filter(t => t.status === 'pending').length} color="bg-amber-500" icon={<Clock size={24}/>} />
-              <StatCard label="En Proceso" value={filteredTasks.filter(t => t.status === 'accepted').length} color="bg-indigo-600" icon={<RefreshCw size={24}/>} />
-              <StatCard label="Concluidas" value={filteredTasks.filter(t => t.status === 'completed').length} color="bg-emerald-500" icon={<CheckSquare size={24}/>} />
+              <StatCard label="Tareas Pendientes" value={filteredTasks.filter(t => t.status === 'pending').length} color="bg-amber-500" icon={<Clock size={24}/>} />
+              <StatCard label="En Ejecución" value={filteredTasks.filter(t => t.status === 'accepted').length} color="bg-indigo-600" icon={<RefreshCw size={24}/>} />
+              <StatCard label="Completadas" value={filteredTasks.filter(t => t.status === 'completed').length} color="bg-emerald-500" icon={<CheckSquare size={24}/>} />
             </div>
 
             {currentUser.role === 'admin' && efficiencyData.length > 0 && (
               <div className="bg-white p-12 rounded-[48px] shadow-sm border border-slate-100">
-                <h3 className="text-xl font-black mb-12 flex items-center gap-3 text-slate-800"><TrendingUp size={24} className="text-indigo-600"/> Rendimiento del Equipo (%)</h3>
+                <h3 className="text-xl font-black mb-12 flex items-center gap-3 text-slate-800"><TrendingUp size={24} className="text-indigo-600"/> Rendimiento por Usuario (%)</h3>
                 <div className="h-[400px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={efficiencyData}>
@@ -336,9 +361,7 @@ const App = () => {
            <UsersView 
              users={users} 
              onAdd={(u:any) => setUsers([...users, {...u, id: Date.now().toString()}])}
-             onUpdate={(id:string, update:any) => {
-               setUsers(prev => prev.map(u => u.id === id ? { ...u, ...update } : u));
-             }}
+             onUpdate={(id:string, update:any) => setUsers(prev => prev.map(u => u.id === id ? { ...u, ...update } : u))}
              onDelete={(id:string) => {
                if(id === currentUser.id) return alert('No puedes eliminarte a ti mismo.');
                if(confirm('¿Seguro? Se eliminarán también sus tareas.')) {
@@ -351,8 +374,9 @@ const App = () => {
 
         {view === 'settings' && (
           <div className="max-w-4xl space-y-12 animate-in fade-in duration-500">
+             {/* Horarios */}
              <div className="bg-white p-12 rounded-[48px] shadow-sm border border-slate-100 space-y-6">
-                <h3 className="text-2xl font-black mb-8 text-slate-800">Horario de Operación</h3>
+                <h3 className="text-2xl font-black mb-8 text-slate-800">Horarios de Trabajo</h3>
                 {Object.entries(businessHours).map(([day, config]) => (
                   <div key={day} className={`flex items-center justify-between p-6 rounded-[32px] border transition-all duration-300 ${config.active ? 'bg-slate-50' : 'opacity-30 grayscale'}`}>
                     <div className="flex items-center gap-6">
@@ -367,28 +391,46 @@ const App = () => {
                 ))}
              </div>
 
+             {/* Gestión de Base de Datos */}
              <div className="bg-slate-900 p-12 rounded-[48px] shadow-2xl text-white space-y-8">
-                <h3 className="text-2xl font-black flex items-center gap-4"><Cloud className="text-indigo-400" /> Sincronización Drive</h3>
-                <div className="space-y-4">
-                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Enlace del Archivo Compartido (JSON)</label>
-                   <div className="flex gap-4">
-                      <input 
-                        type="text" 
-                        placeholder="https://drive.google.com/..." 
-                        className="flex-1 px-8 py-5 bg-white/5 border border-white/10 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" 
-                        value={syncUrl}
-                        onChange={e => setSyncUrl(e.target.value)}
-                      />
-                      <button onClick={fetchCloudData} className="bg-indigo-600 text-white px-8 py-5 rounded-3xl font-black uppercase text-xs tracking-widest">PROBAR</button>
+                <h3 className="text-2xl font-black flex items-center gap-4"><Database className="text-indigo-400" /> Base de Datos (database.json)</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                   <div className="space-y-4">
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Local</p>
+                      <div className="flex flex-col gap-3">
+                        <button onClick={exportDB} className="bg-white text-slate-900 py-4 rounded-3xl font-black uppercase text-xs flex items-center justify-center gap-3 hover:bg-slate-100 transition-all">
+                           <Download size={18} /> Descargar database.json
+                        </button>
+                        <input type="file" ref={fileInputRef} onChange={importDB} className="hidden" accept=".json" />
+                        <button onClick={() => fileInputRef.current?.click()} className="bg-white/10 text-white py-4 rounded-3xl font-black uppercase text-xs flex items-center justify-center gap-3 hover:bg-white/20 transition-all">
+                           <Upload size={18} /> Cargar database.json
+                        </button>
+                      </div>
+                   </div>
+
+                   <div className="space-y-4">
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Nube (Google Drive)</p>
+                      <div className="space-y-3">
+                        <input 
+                          type="text" 
+                          placeholder="Link de Drive compartido..." 
+                          className="w-full px-6 py-4 bg-white/5 border border-white/10 rounded-2xl font-bold text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                          value={syncUrl}
+                          onChange={e => setSyncUrl(e.target.value)}
+                        />
+                        <button onClick={fetchCloudData} className="w-full bg-indigo-600 text-white py-4 rounded-3xl font-black uppercase text-xs flex items-center justify-center gap-3 shadow-xl shadow-indigo-600/20">
+                           <Cloud size={18} /> Sincronizar ahora
+                        </button>
+                      </div>
                    </div>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                   <button onClick={exportData} className="flex-1 bg-white/10 hover:bg-white/20 text-white py-5 rounded-3xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3">
-                      <Download size={18} /> Exportar Backup
-                   </button>
-                   <div className="flex-1 bg-white/5 p-6 rounded-3xl border border-white/5 flex items-start gap-4">
-                      <Info size={20} className="text-indigo-400 shrink-0" />
-                      <p className="text-[10px] text-slate-400 leading-relaxed font-bold uppercase">Sube tu archivo .json a Drive, actívalo como "Cualquier persona con el enlace" y pega el link arriba.</p>
+
+                <div className="flex items-start gap-4 p-6 bg-white/5 rounded-3xl border border-white/5">
+                   <Info size={20} className="text-indigo-400 shrink-0" />
+                   <div className="space-y-1">
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">Instrucciones de Drive:</p>
+                      <p className="text-[9px] text-slate-500 leading-relaxed font-bold uppercase">1. Sube tu 'database.json' a Drive. <br/> 2. Haz clic derecho > Compartir > Cambiar a 'Cualquier persona con el enlace'. <br/> 3. Pega ese enlace arriba y presiona Sincronizar.</p>
                    </div>
                 </div>
              </div>
@@ -400,8 +442,8 @@ const App = () => {
 };
 
 const SidebarBtn = ({ active, onClick, icon, label }: any) => (
-  <button onClick={onClick} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all duration-300 ${active ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/30' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'}`}>
-    {icon} <span className="font-bold">{label}</span>
+  <button onClick={onClick} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all duration-300 ${active ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/30 font-black' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300 font-bold'}`}>
+    {icon} <span>{label}</span>
   </button>
 );
 
@@ -430,7 +472,7 @@ const UsersView = ({ users, onAdd, onUpdate, onDelete }: any) => {
   };
 
   const handleSave = () => {
-    if (!f.name || !f.username || !f.password) return alert('Campos incompletos');
+    if (!f.name || !f.username || !f.password) return alert('Por favor completa todos los campos.');
     if (modal.editing) onUpdate(modal.editing, f);
     else onAdd(f);
     setModal({ open: false, editing: null });
@@ -439,15 +481,15 @@ const UsersView = ({ users, onAdd, onUpdate, onDelete }: any) => {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
-        <h3 className="text-2xl font-black text-slate-900 tracking-tighter uppercase tracking-widest">Equipo de Trabajo</h3>
+        <h3 className="text-2xl font-black text-slate-900 tracking-tighter uppercase tracking-widest">Colaboradores</h3>
         <button onClick={() => handleOpen()} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2">
-          <Plus size={20}/> NUEVO MIEMBRO
+          <Plus size={20}/> NUEVO PERFIL
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {users.map((u:User) => (
-          <div key={u.id} className="bg-white p-10 rounded-[48px] border border-slate-100 text-center flex flex-col items-center shadow-sm relative group overflow-hidden">
+          <div key={u.id} className="bg-white p-10 rounded-[48px] border border-slate-100 text-center flex flex-col items-center shadow-sm relative group">
             <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
               <button onClick={() => handleOpen(u)} className="p-3 bg-indigo-50 text-indigo-500 rounded-2xl hover:bg-indigo-500 hover:text-white transition-colors"><Edit2 size={16}/></button>
               <button onClick={() => onDelete(u.id)} className="p-3 bg-red-50 text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-colors"><Trash2 size={16}/></button>
@@ -464,11 +506,11 @@ const UsersView = ({ users, onAdd, onUpdate, onDelete }: any) => {
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl flex items-center justify-center p-8 z-[60]">
           <div className="bg-white p-12 rounded-[56px] w-full max-w-md shadow-2xl relative">
              <button onClick={() => setModal({open: false, editing: null})} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500"><X size={24}/></button>
-             <h3 className="text-3xl font-black mb-8 tracking-tighter">{modal.editing ? 'Editar' : 'Nuevo'} Usuario</h3>
+             <h3 className="text-3xl font-black mb-8 tracking-tighter">{modal.editing ? 'Editar' : 'Crear'} Acceso</h3>
              <div className="space-y-6">
-                <input placeholder="Nombre Completo" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.name} onChange={e => setF({...f, name: e.target.value})} />
+                <input placeholder="Nombre Real" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.name} onChange={e => setF({...f, name: e.target.value})} />
                 <input placeholder="Usuario (Login)" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.username} onChange={e => setF({...f, username: e.target.value})} />
-                <input type="password" placeholder="Contraseña" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.password} onChange={e => setF({...f, password: e.target.value})} />
+                <input type="password" placeholder="Clave" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.password} onChange={e => setF({...f, password: e.target.value})} />
                 <select className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer appearance-none" value={f.role} onChange={e => setF({...f, role: e.target.value as Role})}>
                     <option value="user">USER (Colaborador)</option>
                     <option value="admin">ADMIN (Administrador)</option>
@@ -491,13 +533,13 @@ const TasksList = ({ user, tasks, users, onUpdate, onDelete, onAdd }: any) => {
     <div className="space-y-8 animate-in fade-in duration-500">
       {user.role === 'admin' && (
         <button onClick={() => setModal(true)} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2">
-          <Plus size={20}/> NUEVA TAREA
+          <Plus size={20}/> ASIGNAR TAREA
         </button>
       )}
 
       <div className="grid grid-cols-1 gap-6">
         {tasks.map((t: Task) => (
-          <div key={t.id} className="bg-white p-10 rounded-[40px] border border-slate-100 shadow-sm flex flex-col relative group overflow-hidden">
+          <div key={t.id} className="bg-white p-10 rounded-[40px] border border-slate-100 shadow-sm flex flex-col relative group overflow-hidden transition-all hover:shadow-lg">
              <div className="flex justify-between items-start mb-6">
                <div className="flex-1">
                   <div className="flex items-center gap-3 mb-4">
@@ -511,19 +553,19 @@ const TasksList = ({ user, tasks, users, onUpdate, onDelete, onAdd }: any) => {
                   <p className="text-slate-500 mt-4 leading-relaxed font-medium">{t.description}</p>
                </div>
                {user.role === 'admin' && (
-                 <button onClick={() => confirm('¿Borrar tarea?') && onDelete(t.id)} className="text-slate-200 hover:text-red-500 p-2 transition-colors"><Trash2 size={22}/></button>
+                 <button onClick={() => confirm('¿Borrar esta tarea permanentemente?') && onDelete(t.id)} className="text-slate-200 hover:text-red-500 p-2 transition-colors"><Trash2 size={22}/></button>
                )}
              </div>
              
              {user.role === 'user' && t.status !== 'completed' && (
                <div className="mt-8 pt-8 border-t border-slate-50 flex flex-wrap gap-4">
                  {t.status === 'pending' ? (
-                   <button onClick={() => onUpdate(t.id, {status: 'accepted', acceptedAt: Date.now()})} className="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl uppercase text-xs tracking-widest">ACEPTAR TAREA</button>
+                   <button onClick={() => onUpdate(t.id, {status: 'accepted', acceptedAt: Date.now()})} className="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl uppercase text-xs tracking-widest hover:bg-indigo-700 transition-all">INICIAR LABOR</button>
                  ) : (
                    <div className="flex-1 flex gap-4 min-w-[300px]">
-                      <input className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Registrar avance..." value={noteContent} onChange={e => setNoteContent(e.target.value)} />
+                      <input className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Escribe tu reporte de avance..." value={noteContent} onChange={e => setNoteContent(e.target.value)} />
                       <button onClick={() => { if(noteContent) { onUpdate(t.id, {notes: [...t.notes, {id: Date.now().toString(), text: noteContent, timestamp: Date.now()}]}); setNoteContent(''); } }} className="bg-slate-900 text-white px-6 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest">NOTAR</button>
-                      <button onClick={() => t.notes.length > 0 ? onUpdate(t.id, {status: 'completed', completedAt: Date.now()}) : alert('Registra al menos un avance antes de terminar.')} className="bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-emerald-600/20">FINALIZAR</button>
+                      <button onClick={() => t.notes.length > 0 ? onUpdate(t.id, {status: 'completed', completedAt: Date.now()}) : alert('Debes registrar al menos un reporte de avance.')} className="bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl">TERMINAR</button>
                    </div>
                  )}
                </div>
@@ -531,7 +573,7 @@ const TasksList = ({ user, tasks, users, onUpdate, onDelete, onAdd }: any) => {
 
              {t.notes.length > 0 && (
                <div className="mt-10 space-y-3">
-                 <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest px-2">Bitácora</p>
+                 <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest px-2">Historial de Reportes</p>
                  {t.notes.map((n:any) => (
                    <div key={n.id} className="bg-slate-50/50 p-5 rounded-3xl text-sm font-bold text-slate-700 flex justify-between items-center border border-slate-100/50">
                      <span>{n.text}</span> 
@@ -543,7 +585,7 @@ const TasksList = ({ user, tasks, users, onUpdate, onDelete, onAdd }: any) => {
           </div>
         ))}
         {tasks.length === 0 && (
-          <div className="py-20 text-center bg-white rounded-[40px] border border-dashed border-slate-200 text-slate-400 font-bold uppercase text-xs tracking-widest">No hay labores asignadas.</div>
+          <div className="py-24 text-center bg-white rounded-[40px] border border-dashed border-slate-200 text-slate-300 font-bold uppercase text-xs tracking-[0.3em]">No hay tareas en el sistema.</div>
         )}
       </div>
 
@@ -551,21 +593,21 @@ const TasksList = ({ user, tasks, users, onUpdate, onDelete, onAdd }: any) => {
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl flex items-center justify-center p-8 z-[60]">
           <div className="bg-white p-12 rounded-[56px] w-full max-w-2xl shadow-2xl relative animate-in zoom-in-95 duration-200">
              <button onClick={() => setModal(false)} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500"><X size={24}/></button>
-             <h3 className="text-3xl font-black mb-8 text-slate-900 tracking-tighter">Asignar Labor</h3>
+             <h3 className="text-3xl font-black mb-8 text-slate-900 tracking-tighter">Asignar Nueva Labor</h3>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Nombre de Tarea</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Nombre</label>
                     <input placeholder="Ej: Auditoría" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.title} onChange={e => setF({...f, title: e.target.value})} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Descripción</label>
-                    <textarea placeholder="Detalles operativos..." className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-medium h-32 resize-none outline-none focus:ring-2 focus:ring-indigo-500" value={f.description} onChange={e => setF({...f, description: e.target.value})} />
+                    <textarea placeholder="Pasos a seguir..." className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-medium h-32 resize-none outline-none focus:ring-2 focus:ring-indigo-500" value={f.description} onChange={e => setF({...f, description: e.target.value})} />
                   </div>
                 </div>
                 <div className="space-y-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Tiempo Estimado (Hrs)</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Carga Estimada (Hrs)</label>
                     <input type="number" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.estimatedHours} onChange={e => setF({...f, estimatedHours: Number(e.target.value)})} />
                   </div>
                   <div className="space-y-2">
