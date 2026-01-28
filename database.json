@@ -1,0 +1,51 @@
+{
+  "users": [
+    {
+      "id": "admin-1",
+      "name": "Administrador Principal",
+      "username": "Automa_5",
+      "password": "14569",
+      "role": "admin"
+    }
+  ],
+  "tasks": [],
+  "businessHours": {
+    "0": {
+      "active": false,
+      "start": "09:00",
+      "end": "17:00"
+    },
+    "1": {
+      "active": true,
+      "start": "09:00",
+      "end": "17:00"
+    },
+    "2": {
+      "active": true,
+      "start": "09:00",
+      "end": "17:00"
+    },
+    "3": {
+      "active": true,
+      "start": "09:00",
+      "end": "17:00"
+    },
+    "4": {
+      "active": true,
+      "start": "09:00",
+      "end": "17:00"
+    },
+    "5": {
+      "active": true,
+      "start": "09:00",
+      "end": "17:00"
+    },
+    "6": {
+      "active": false,
+      "start": "09:00",
+      "end": "17:00"
+    }
+  },
+  "syncUrl": "",
+  "date": "2026-01-28T18:30:39.936Z"
+}
