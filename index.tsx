@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { 
   LayoutDashboard, CheckSquare, Users, Settings, LogOut, Plus, Clock, 
-  TrendingUp, RefreshCw, AlertCircle, Info, ChevronRight, BarChart2
+  TrendingUp, RefreshCw, AlertCircle, Info, ChevronRight, BarChart2, Trash2, X
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -84,7 +84,7 @@ const calculateWorkHours = (start: number, end: number, config: BusinessHours): 
 
 // --- COMPONENTES DE VISTA ---
 
-const LoginPage = ({ onLogin }: { onLogin: (u: string, p: string) => void }) => {
+const LoginPage = ({ users, onLogin }: { users: User[], onLogin: (u: string, p: string) => void }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
@@ -99,8 +99,31 @@ const LoginPage = ({ onLogin }: { onLogin: (u: string, p: string) => void }) => 
           <p className="text-slate-500 font-bold text-sm uppercase tracking-widest">Panel de Control</p>
         </div>
         <form className="p-12 space-y-6" onSubmit={e => { e.preventDefault(); onLogin(username, password); }}>
-          <input type="text" placeholder="Usuario" className="w-full px-8 py-5 bg-white/5 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold" value={username} onChange={e => setUsername(e.target.value)} required />
-          <input type="password" placeholder="Contraseña" className="w-full px-8 py-5 bg-white/5 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold" value={password} onChange={e => setPassword(e.target.value)} required />
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Seleccionar Usuario</label>
+            <select 
+              className="w-full px-8 py-5 bg-white/5 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold appearance-none cursor-pointer"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              required
+            >
+              <option value="" disabled className="bg-[#0a0f1d]">Elegir perfil...</option>
+              {users.map(u => (
+                <option key={u.id} value={u.username} className="bg-[#0a0f1d]">{u.name} (@{u.username})</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Contraseña</label>
+            <input 
+              type="password" 
+              placeholder="••••••••" 
+              className="w-full px-8 py-5 bg-white/5 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold" 
+              value={password} 
+              onChange={e => setPassword(e.target.value)} 
+              required 
+            />
+          </div>
           <button className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-5 rounded-2xl transition-all shadow-xl active:scale-95 shadow-indigo-600/20">ACCEDER AL PANEL</button>
         </form>
       </div>
@@ -163,7 +186,7 @@ const App = () => {
   }, [users, tasks, businessHours]);
 
   if (!currentUser) {
-    return <LoginPage onLogin={(u, p) => {
+    return <LoginPage users={users} onLogin={(u, p) => {
       const found = users.find(usr => usr.username === u && usr.password === p);
       if (found) setCurrentUser(found);
       else alert('Credenciales incorrectas');
@@ -254,25 +277,17 @@ const App = () => {
         )}
 
         {view === 'users' && (
-           <div className="space-y-8 animate-in fade-in duration-500">
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-               {users.map(u => (
-                 <div key={u.id} className="bg-white p-10 rounded-[48px] border border-slate-100 text-center flex flex-col items-center shadow-sm">
-                   <div className={`w-20 h-20 rounded-[28px] flex items-center justify-center font-black text-2xl mb-6 ${u.role === 'admin' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{u.name[0]}</div>
-                   <p className="font-black text-xl mb-1">{u.name}</p>
-                   <div className="px-6 py-2 bg-slate-50 rounded-full text-[9px] font-black uppercase text-slate-500 tracking-widest">{u.role}</div>
-                 </div>
-               ))}
-               <button onClick={() => {
-                 const name = prompt("Nombre:");
-                 const user = prompt("Username:");
-                 const pass = prompt("Password:");
-                 if(name && user && pass) setUsers([...users, {id: Date.now().toString(), name, username: user, password: pass, role: 'user'}]);
-               }} className="bg-white border-2 border-dashed border-slate-200 rounded-[48px] p-10 flex flex-col items-center justify-center text-slate-400 hover:border-indigo-500 hover:text-indigo-500 transition-all">
-                  <Plus size={40} className="mb-4" /> <span className="font-black uppercase text-xs tracking-widest">Añadir Usuario</span>
-               </button>
-             </div>
-           </div>
+           <UsersView 
+             users={users} 
+             onAdd={(u:any) => setUsers([...users, {...u, id: Date.now().toString()}])}
+             onDelete={(id:string) => {
+               if(id === currentUser.id) return alert('No puedes eliminarte a ti mismo.');
+               if(confirm('¿Seguro que deseas eliminar este usuario?')) {
+                 setUsers(users.filter(u => u.id !== id));
+                 setTasks(tasks.filter(t => t.assignedTo !== id));
+               }
+             }}
+           />
         )}
 
         {view === 'settings' && (
@@ -281,7 +296,7 @@ const App = () => {
             {Object.entries(businessHours).map(([day, config]) => (
               <div key={day} className={`flex items-center justify-between p-6 rounded-[32px] border transition-all duration-300 ${config.active ? 'bg-slate-50 border-slate-100' : 'opacity-30 grayscale border-transparent'}`}>
                 <div className="flex items-center gap-6">
-                  <input type="checkbox" checked={config.active} onChange={e => setBusinessHours({...businessHours, [day]: {...config, active: e.target.checked}})} className="w-6 h-6 rounded-lg accent-indigo-600" />
+                  <input type="checkbox" checked={config.active} onChange={e => setBusinessHours({...businessHours, [day]: {...config, active: e.target.checked}})} className="w-6 h-6 rounded-lg accent-indigo-600 cursor-pointer" />
                   <span className="font-black uppercase text-xs tracking-widest w-24">Día {day}</span>
                 </div>
                 <div className="flex gap-4">
@@ -303,38 +318,107 @@ const SidebarBtn = ({ active, onClick, icon, label }: any) => (
   </button>
 );
 
+const UsersView = ({ users, onAdd, onDelete }: any) => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [f, setF] = useState({ name: '', username: '', password: '', role: 'user' });
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h3 className="text-2xl font-black tracking-tighter text-slate-900">Control de Miembros</h3>
+          <p className="text-slate-400 font-medium text-sm">Gestiona accesos y roles del equipo</p>
+        </div>
+        <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2">
+          <Plus size={20}/> NUEVO MIEMBRO
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {users.map((u:any) => (
+          <div key={u.id} className="bg-white p-10 rounded-[48px] border border-slate-100 text-center flex flex-col items-center shadow-sm relative group">
+            <button 
+              onClick={() => onDelete(u.id)}
+              className="absolute top-6 right-6 p-3 bg-red-50 text-red-500 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:text-white"
+            >
+              <Trash2 size={18} />
+            </button>
+            <div className={`w-20 h-20 rounded-[28px] flex items-center justify-center font-black text-2xl mb-6 shadow-xl ${u.role === 'admin' ? 'bg-indigo-600 text-white shadow-indigo-500/30' : 'bg-slate-100 text-slate-400 shadow-slate-200'}`}>{u.name[0]}</div>
+            <p className="font-black text-xl mb-1">{u.name}</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">@{u.username}</p>
+            <div className={`px-6 py-2 rounded-full text-[9px] font-black uppercase tracking-widest ${u.role === 'admin' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-500'}`}>{u.role}</div>
+          </div>
+        ))}
+      </div>
+
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl flex items-center justify-center p-8 z-[60] animate-in fade-in duration-300">
+          <div className="bg-white p-12 rounded-[56px] w-full max-w-md shadow-2xl relative">
+             <button onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500"><X size={24}/></button>
+             <h3 className="text-3xl font-black tracking-tighter mb-8">Crear Usuario</h3>
+             <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Nombre Completo</label>
+                  <input type="text" placeholder="Ej: Juan Pérez" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.name} onChange={e => setF({...f, name: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Nombre de Usuario</label>
+                  <input type="text" placeholder="Ej: jperez" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.username} onChange={e => setF({...f, username: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Contraseña Temporal</label>
+                  <input type="password" placeholder="••••••••" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.password} onChange={e => setF({...f, password: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Rol en Sistema</label>
+                  <select className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={f.role} onChange={e => setF({...f, role: e.target.value as any})}>
+                      <option value="user">Colaborador (User)</option>
+                      <option value="admin">Administrador (Admin)</option>
+                  </select>
+                </div>
+             </div>
+             <button onClick={() => { onAdd(f); setIsModalOpen(false); setF({name:'',username:'',password:'',role:'user'}); }} className="w-full bg-indigo-600 text-white py-5 rounded-3xl font-black shadow-xl shadow-indigo-600/30 mt-10 hover:bg-indigo-700 active:scale-95 transition-all">AÑADIR AL EQUIPO</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const TasksList = ({ user, tasks, users, onUpdate, onDelete, onAdd }: any) => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [noteContent, setNoteContent] = useState('');
+  const [f, setF] = useState({ title: '', description: '', assignedTo: '', estimatedHours: 1 });
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       {user.role === 'admin' && (
-        <button onClick={() => {
-           const title = prompt("Título:");
-           const desc = prompt("Descripción:");
-           const hours = Number(prompt("Horas estimadas:"));
-           const userId = prompt("Username del usuario asignado:");
-           const targetUser = users.find((u:any)=>u.username === userId);
-           if(title && targetUser) onAdd({title, description: desc, assignedTo: targetUser.id, estimatedHours: hours});
-           else if(title) alert('Usuario no encontrado o incompleto');
-        }} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2">
+        <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2">
           <Plus size={20}/> NUEVA ASIGNACIÓN
         </button>
       )}
       <div className="grid grid-cols-1 gap-6">
         {tasks.map((t: any) => (
-          <div key={t.id} className="bg-white p-10 rounded-[40px] border border-slate-100 shadow-sm flex flex-col hover:shadow-md transition-shadow">
+          <div key={t.id} className="bg-white p-10 rounded-[40px] border border-slate-100 shadow-sm flex flex-col hover:shadow-md transition-shadow relative overflow-hidden group">
              <div className="flex justify-between items-start mb-6">
                <div className="flex-1">
                   <div className="flex items-center gap-3 mb-4">
-                    <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${t.status === 'completed' ? 'bg-emerald-50 text-emerald-600' : t.status === 'accepted' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'}`}>
+                    <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${t.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : t.status === 'accepted' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-amber-50 text-amber-600 border border-amber-100'}`}>
                       {t.status}
                     </span>
                     <span className="text-[9px] font-black text-slate-300 uppercase">EST: {t.estimatedHours}H</span>
+                    {user.role === 'admin' && (
+                      <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">
+                        → {users.find((u:any)=>u.id === t.assignedTo)?.name}
+                      </span>
+                    )}
                   </div>
-                  <h4 className="text-2xl font-black text-slate-900 tracking-tight leading-none">{t.title}</h4>
+                  <h4 className="text-2xl font-black text-slate-900 tracking-tight leading-none group-hover:text-indigo-600 transition-colors">{t.title}</h4>
                   <p className="text-slate-500 mt-4 leading-relaxed font-medium">{t.description}</p>
                </div>
-               {user.role === 'admin' && <button onClick={() => onDelete(t.id)} className="text-slate-200 hover:text-red-500 p-2 transition-colors"><LogOut size={22}/></button>}
+               {user.role === 'admin' && (
+                 <button onClick={() => confirm('¿Eliminar tarea?') && onDelete(t.id)} className="text-slate-200 hover:text-red-500 p-2 transition-colors"><Trash2 size={22}/></button>
+               )}
              </div>
              
              {user.role === 'user' && t.status !== 'completed' && (
@@ -370,6 +454,54 @@ const TasksList = ({ user, tasks, users, onUpdate, onDelete, onAdd }: any) => {
           </div>
         )}
       </div>
+
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl flex items-center justify-center p-8 z-[60] animate-in fade-in duration-300">
+          <div className="bg-white p-12 rounded-[56px] w-full max-w-2xl shadow-2xl relative">
+             <button onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500"><X size={24}/></button>
+             <h3 className="text-3xl font-black tracking-tighter mb-8 text-slate-900">Nueva Asignación</h3>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Título de la Tarea</label>
+                    <input type="text" placeholder="Ej: Reporte Mensual" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.title} onChange={e => setF({...f, title: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Descripción de Objetivos</label>
+                    <textarea placeholder="Detalles de la labor..." className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-medium h-32 outline-none focus:ring-2 focus:ring-indigo-500 resize-none" value={f.description} onChange={e => setF({...f, description: e.target.value})} />
+                  </div>
+                </div>
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Tiempo Estimado (Hrs)</label>
+                    <input type="number" placeholder="Ej: 5" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.estimatedHours} onChange={e => setF({...f, estimatedHours: Number(e.target.value)})} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Colaborador Asignado</label>
+                    <select className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={f.assignedTo} onChange={e => setF({...f, assignedTo: e.target.value})}>
+                        <option value="" disabled>Seleccionar miembro...</option>
+                        {users.filter((u:any)=>u.role === 'user').map((u:any) => (
+                          <option key={u.id} value={u.id}>{u.name} (@{u.username})</option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+             </div>
+             <button 
+                onClick={() => { 
+                  if(f.title && f.assignedTo) {
+                    onAdd(f); 
+                    setIsModalOpen(false); 
+                    setF({title:'',description:'',assignedTo:'',estimatedHours:1});
+                  } else alert('Título y Usuario son obligatorios.');
+                }} 
+                className="w-full bg-indigo-600 text-white py-5 rounded-3xl font-black shadow-xl shadow-indigo-600/30 mt-10 hover:bg-indigo-700 active:scale-95 transition-all uppercase tracking-widest text-sm"
+              >
+                PUBLICAR ASIGNACIÓN
+              </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
