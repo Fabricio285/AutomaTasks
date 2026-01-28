@@ -4,11 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TaskFlow Pro | Gestión de Tareas</title>
+    <title>TaskFlow Pro | Eficiencia Total</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     
-    <!-- Babel Standalone: El motor que traduce el código para el navegador -->
+    <!-- Babel Standalone para procesar TSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
@@ -16,76 +16,53 @@
         .loading-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
         #error-display { display: none; }
-        /* Ocultar scrollbar pero permitir scroll */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 
     <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@19.0.0",
-    "react-dom": "https://esm.sh/react-dom@19.0.0",
-    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
-    "recharts": "https://esm.sh/recharts@2.15.0",
-    "lucide-react": "https://esm.sh/lucide-react@0.460.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "react/": "https://esm.sh/react@^19.2.4/"
-  }
-}
-</script>
+    {
+      "imports": {
+        "react": "https://esm.sh/react@19.0.0",
+        "react-dom": "https://esm.sh/react-dom@19.0.0",
+        "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+        "recharts": "https://esm.sh/recharts@2.15.0?external=react,react-dom",
+        "lucide-react": "https://esm.sh/lucide-react@0.460.0?external=react,react-dom"
+      }
+    }
+    </script>
 </head>
 <body class="text-slate-100 antialiased">
     <div id="root">
-        <!-- Pantalla de carga profesional -->
         <div class="flex flex-col items-center justify-center h-screen bg-[#0f172a]">
             <div id="loading-ui" class="flex flex-col items-center">
-                <div class="w-20 h-20 bg-indigo-600 rounded-[24px] mb-8 loading-pulse shadow-2xl shadow-indigo-500/40 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                <div class="w-20 h-20 bg-indigo-600 rounded-[24px] mb-8 loading-pulse shadow-2xl shadow-indigo-500/40 flex items-center justify-center text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
                 </div>
                 <h1 class="text-white font-black text-2xl tracking-tighter mb-2">TaskFlow <span class="text-indigo-500">PRO</span></h1>
-                <p class="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 loading-pulse">Inicializando motor de eficiencia</p>
-                <div class="mt-8 flex gap-2">
-                    <div class="w-1.5 h-1.5 rounded-full bg-indigo-500/40 animate-bounce"></div>
-                    <div class="w-1.5 h-1.5 rounded-full bg-indigo-500/60 animate-bounce [animation-delay:0.2s]"></div>
-                    <div class="w-1.5 h-1.5 rounded-full bg-indigo-500/80 animate-bounce [animation-delay:0.4s]"></div>
-                </div>
+                <p class="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 loading-pulse">Preparando entorno de trabajo</p>
             </div>
 
-            <!-- Panel de errores detallado -->
             <div id="error-display" class="max-w-lg w-full p-10 bg-red-500/5 border border-red-500/20 rounded-[40px] text-center mx-4">
-                <div class="w-16 h-16 bg-red-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                </div>
-                <p class="text-red-500 font-black uppercase text-xs tracking-widest mb-2">Error de Sistema</p>
+                <p class="text-red-500 font-black uppercase text-xs tracking-widest mb-2">Fallo en el sistema</p>
                 <p id="error-message" class="text-sm text-slate-400 font-medium leading-relaxed mb-8"></p>
-                <button onclick="location.reload()" class="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all">Reiniciar Aplicación</button>
+                <button onclick="location.reload()" class="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all">Reintentar</button>
             </div>
         </div>
     </div>
 
     <script>
-        // Captura errores antes de que cargue React
         window.onerror = function(message, source, lineno, colno, error) {
             const loadingUi = document.getElementById('loading-ui');
             const errorDisplay = document.getElementById('error-display');
             const errorMsg = document.getElementById('error-message');
-            
             if (loadingUi) loadingUi.style.display = 'none';
             if (errorDisplay) errorDisplay.style.display = 'block';
-            if (errorMsg) errorMsg.textContent = message + " (Ver consola para detalles)";
-            
-            console.error("Critical Runtime Error:", {message, source, lineno, error});
+            if (errorMsg) errorMsg.textContent = message;
             return false;
         };
     </script>
 
-    <!-- Cargador Principal -->
-    <script 
-        type="text/babel" 
-        data-type="module" 
-        data-presets="react,typescript" 
-        src="index.tsx">
-    </script>
+    <script type="text/babel" data-type="module" data-presets="react,typescript" src="index.tsx"></script>
 </body>
 </html>
