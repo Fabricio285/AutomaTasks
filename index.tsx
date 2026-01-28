@@ -3,15 +3,14 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { 
   LayoutDashboard, CheckSquare, Users, Settings, LogOut, Plus, Clock, 
-  FileText, TrendingUp, AlertCircle, Database, Download, Upload, 
-  Cloud, RefreshCw, Info, BarChart2, ChevronRight
+  TrendingUp, RefreshCw, AlertCircle, Info, ChevronRight, BarChart2
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
   ResponsiveContainer, Cell 
 } from 'recharts';
 
-// --- CONFIGURACIÓN Y TIPOS ---
+// --- DEFINICIONES ---
 
 type Role = 'admin' | 'user';
 type TaskStatus = 'pending' | 'accepted' | 'completed';
@@ -83,31 +82,41 @@ const calculateWorkHours = (start: number, end: number, config: BusinessHours): 
   return totalMs / (1000 * 60 * 60);
 };
 
-// --- COMPONENTES ---
+// --- COMPONENTES DE VISTA ---
 
 const LoginPage = ({ onLogin }: { onLogin: (u: string, p: string) => void }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0f1d] p-6">
-      <div className="max-w-md w-full bg-white/5 backdrop-blur-3xl rounded-[48px] border border-white/10 shadow-2xl">
-        <div className="p-12 text-center bg-gradient-to-b from-indigo-500/10 to-transparent rounded-t-[48px]">
-          <div className="w-20 h-20 bg-indigo-600 rounded-3xl mx-auto mb-8 flex items-center justify-center shadow-2xl shadow-indigo-500/40 rotate-3">
+    <div className="min-h-screen flex items-center justify-center bg-[#0a0f1d] p-6 animate-in fade-in duration-700">
+      <div className="max-w-md w-full bg-white/5 backdrop-blur-3xl rounded-[48px] border border-white/10 shadow-2xl overflow-hidden">
+        <div className="p-12 text-center bg-gradient-to-b from-indigo-500/10 to-transparent">
+          <div className="w-20 h-20 bg-indigo-600 rounded-3xl mx-auto mb-8 flex items-center justify-center shadow-2xl shadow-indigo-500/40 rotate-3 transition-transform hover:rotate-0">
              <CheckSquare size={40} className="text-white" />
           </div>
           <h1 className="text-4xl font-black text-white tracking-tighter mb-2">TaskFlow <span className="text-indigo-500">PRO</span></h1>
-          <p className="text-slate-500 font-bold text-sm uppercase tracking-widest">Acceso Seguro</p>
+          <p className="text-slate-500 font-bold text-sm uppercase tracking-widest">Panel de Control</p>
         </div>
         <form className="p-12 space-y-6" onSubmit={e => { e.preventDefault(); onLogin(username, password); }}>
           <input type="text" placeholder="Usuario" className="w-full px-8 py-5 bg-white/5 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold" value={username} onChange={e => setUsername(e.target.value)} required />
           <input type="password" placeholder="Contraseña" className="w-full px-8 py-5 bg-white/5 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold" value={password} onChange={e => setPassword(e.target.value)} required />
-          <button className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-5 rounded-2xl transition-all shadow-xl active:scale-95">ENTRAR AL SISTEMA</button>
+          <button className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-5 rounded-2xl transition-all shadow-xl active:scale-95 shadow-indigo-600/20">ACCEDER AL PANEL</button>
         </form>
       </div>
     </div>
   );
 };
+
+const StatCard = ({ label, value, color, icon }: any) => (
+  <div className="bg-white p-10 rounded-[40px] shadow-sm border border-slate-100 flex items-center gap-8 group hover:border-indigo-100 transition-all duration-300">
+    <div className={`p-6 rounded-[24px] ${color} text-white shadow-xl group-hover:scale-110 transition-transform`}>{icon}</div>
+    <div>
+      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{label}</p>
+      <p className="text-4xl font-black tracking-tighter text-slate-900">{value}</p>
+    </div>
+  </div>
+);
 
 const App = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -116,8 +125,9 @@ const App = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [view, setView] = useState('dashboard');
 
+  // Carga inicial
   useEffect(() => {
-    const saved = localStorage.getItem('tf_pro_data');
+    const saved = localStorage.getItem('tf_pro_v3_data');
     if (saved) {
       const d = JSON.parse(saved);
       setUsers(d.users || []);
@@ -128,9 +138,10 @@ const App = () => {
     }
   }, []);
 
+  // Persistencia
   useEffect(() => {
     if (users.length > 0) {
-      localStorage.setItem('tf_pro_data', JSON.stringify({ users, tasks, hours: businessHours }));
+      localStorage.setItem('tf_pro_v3_data', JSON.stringify({ users, tasks, hours: businessHours }));
     }
   }, [users, tasks, businessHours]);
 
@@ -144,63 +155,63 @@ const App = () => {
           totalActual += calculateWorkHours(t.acceptedAt, t.completedAt, businessHours);
         }
       });
-      return { name: u.name, efficiency: totalActual > 0 ? Math.round((totalEst / totalActual) * 100) : 0 };
+      return { 
+        name: u.name, 
+        efficiency: totalActual > 0 ? Math.round((totalEst / totalActual) * 100) : 0 
+      };
     });
   }, [users, tasks, businessHours]);
 
-  if (!currentUser) return <LoginPage onLogin={(u, p) => {
-    const found = users.find(usr => usr.username === u && usr.password === p);
-    if (found) setCurrentUser(found);
-    else alert('Credenciales incorrectas');
-  }} />;
+  if (!currentUser) {
+    return <LoginPage onLogin={(u, p) => {
+      const found = users.find(usr => usr.username === u && usr.password === p);
+      if (found) setCurrentUser(found);
+      else alert('Credenciales incorrectas');
+    }} />;
+  }
 
   const filteredTasks = currentUser.role === 'admin' ? tasks : tasks.filter(t => t.assignedTo === currentUser.id);
 
   return (
-    <div className="flex h-screen bg-[#f8fafc] text-slate-900 overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-80 bg-[#0f172a] text-white flex flex-col p-8 shrink-0 border-r border-white/5 shadow-2xl">
+    <div className="flex h-screen bg-[#f8fafc] text-slate-900 overflow-hidden font-sans">
+      {/* Sidebar Lateral */}
+      <aside className="w-80 bg-[#0f172a] text-white flex flex-col p-8 shrink-0 border-r border-white/5 shadow-2xl relative z-40">
         <div className="flex items-center gap-4 mb-12">
           <div className="bg-indigo-600 p-2.5 rounded-xl shadow-lg rotate-3"><CheckSquare size={24} /></div>
           <span className="text-2xl font-black tracking-tighter uppercase">TaskFlow</span>
         </div>
+        
         <nav className="flex-1 space-y-2">
-          <button onClick={() => setView('dashboard')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${view === 'dashboard' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-500 hover:bg-white/5'}`}>
-            <LayoutDashboard size={20} /> <span className="font-bold">Dashboard</span>
-          </button>
-          <button onClick={() => setView('tasks')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${view === 'tasks' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-500 hover:bg-white/5'}`}>
-            <CheckSquare size={20} /> <span className="font-bold">Tareas</span>
-          </button>
+          <SidebarBtn active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<LayoutDashboard size={20}/>} label="Dashboard" />
+          <SidebarBtn active={view === 'tasks'} onClick={() => setView('tasks')} icon={<CheckSquare size={20}/>} label="Tareas" />
           {currentUser.role === 'admin' && (
             <>
-              <button onClick={() => setView('users')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${view === 'users' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-500 hover:bg-white/5'}`}>
-                <Users size={20} /> <span className="font-bold">Usuarios</span>
-              </button>
-              <button onClick={() => setView('settings')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${view === 'settings' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-500 hover:bg-white/5'}`}>
-                <Settings size={20} /> <span className="font-bold">Horarios</span>
-              </button>
+              <SidebarBtn active={view === 'users'} onClick={() => setView('users')} icon={<Users size={20}/>} label="Usuarios" />
+              <SidebarBtn active={view === 'settings'} onClick={() => setView('settings')} icon={<Settings size={20}/>} label="Horarios" />
             </>
           )}
         </nav>
+
         <div className="mt-auto pt-8 border-t border-white/5">
           <div className="flex items-center gap-4 mb-8">
             <div className="w-12 h-12 bg-indigo-500/20 border border-indigo-500/30 rounded-2xl flex items-center justify-center font-black text-indigo-400">{currentUser.name[0]}</div>
-            <div>
+            <div className="overflow-hidden">
               <p className="text-sm font-black truncate">{currentUser.name}</p>
               <p className="text-[10px] text-slate-500 uppercase font-black">{currentUser.role}</p>
             </div>
           </div>
-          <button onClick={() => setCurrentUser(null)} className="w-full flex items-center gap-3 px-6 py-4 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-2xl transition-all font-bold">
-            <LogOut size={18} /> <span>Salir</span>
+          <button onClick={() => setCurrentUser(null)} className="w-full flex items-center gap-3 px-6 py-4 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-2xl transition-all font-bold">
+            <LogOut size={18} /> <span>Cerrar Sesión</span>
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto p-12 no-scrollbar">
+      {/* Contenido Principal */}
+      <main className="flex-1 overflow-y-auto p-12 no-scrollbar bg-slate-50 relative z-30">
         <header className="flex justify-between items-center mb-16">
           <h2 className="text-4xl font-black text-slate-900 tracking-tighter capitalize">{view}</h2>
-          <div className="bg-emerald-500/10 text-emerald-600 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Sistema Activo
+          <div className="bg-white border border-slate-100 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Servidor en Línea
           </div>
         </header>
 
@@ -212,9 +223,9 @@ const App = () => {
               <StatCard label="Finalizadas" value={filteredTasks.filter(t => t.status === 'completed').length} color="bg-emerald-500" icon={<CheckSquare size={24}/>} />
             </div>
 
-            {currentUser.role === 'admin' && (
+            {currentUser.role === 'admin' && efficiencyData.length > 0 && (
               <div className="bg-white p-12 rounded-[48px] shadow-sm border border-slate-100">
-                <h3 className="text-xl font-black mb-12 flex items-center gap-3"><TrendingUp size={24} className="text-indigo-600"/> Eficiencia del Personal (%)</h3>
+                <h3 className="text-xl font-black mb-12 flex items-center gap-3 text-slate-800"><TrendingUp size={24} className="text-indigo-600"/> Eficiencia del Personal (%)</h3>
                 <div className="h-[400px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={efficiencyData}>
@@ -234,7 +245,7 @@ const App = () => {
         )}
 
         {view === 'tasks' && (
-          <TasksComponent 
+          <TasksList 
             user={currentUser} tasks={filteredTasks} users={users} 
             onUpdate={(id, update) => setTasks(prev => prev.map(t => t.id === id ? {...t, ...update} : t))}
             onDelete={id => setTasks(prev => prev.filter(t => t.id !== id))}
@@ -265,17 +276,17 @@ const App = () => {
         )}
 
         {view === 'settings' && (
-          <div className="bg-white p-12 rounded-[48px] shadow-sm border border-slate-100 max-w-4xl space-y-6">
-            <h3 className="text-2xl font-black mb-8">Configuración de Jornada</h3>
+          <div className="bg-white p-12 rounded-[48px] shadow-sm border border-slate-100 max-w-4xl space-y-6 animate-in fade-in duration-500">
+            <h3 className="text-2xl font-black mb-8 text-slate-800">Configuración de Jornada</h3>
             {Object.entries(businessHours).map(([day, config]) => (
-              <div key={day} className={`flex items-center justify-between p-6 rounded-[32px] border ${config.active ? 'bg-slate-50' : 'opacity-30 grayscale'}`}>
+              <div key={day} className={`flex items-center justify-between p-6 rounded-[32px] border transition-all duration-300 ${config.active ? 'bg-slate-50 border-slate-100' : 'opacity-30 grayscale border-transparent'}`}>
                 <div className="flex items-center gap-6">
                   <input type="checkbox" checked={config.active} onChange={e => setBusinessHours({...businessHours, [day]: {...config, active: e.target.checked}})} className="w-6 h-6 rounded-lg accent-indigo-600" />
                   <span className="font-black uppercase text-xs tracking-widest w-24">Día {day}</span>
                 </div>
                 <div className="flex gap-4">
-                  <input type="time" value={config.start} onChange={e => setBusinessHours({...businessHours, [day]: {...config, start: e.target.value}})} className="px-4 py-2 border rounded-xl" />
-                  <input type="time" value={config.end} onChange={e => setBusinessHours({...businessHours, [day]: {...config, end: e.target.value}})} className="px-4 py-2 border rounded-xl" />
+                  <input type="time" value={config.start} onChange={e => setBusinessHours({...businessHours, [day]: {...config, start: e.target.value}})} className="px-4 py-2 border rounded-xl font-bold bg-white" />
+                  <input type="time" value={config.end} onChange={e => setBusinessHours({...businessHours, [day]: {...config, end: e.target.value}})} className="px-4 py-2 border rounded-xl font-bold bg-white" />
                 </div>
               </div>
             ))}
@@ -286,18 +297,14 @@ const App = () => {
   );
 };
 
-const StatCard = ({ label, value, color, icon }: any) => (
-  <div className="bg-white p-10 rounded-[40px] shadow-sm border border-slate-100 flex items-center gap-8">
-    <div className={`p-6 rounded-[24px] ${color} text-white shadow-xl`}>{icon}</div>
-    <div>
-      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{label}</p>
-      <p className="text-4xl font-black tracking-tighter">{value}</p>
-    </div>
-  </div>
+const SidebarBtn = ({ active, onClick, icon, label }: any) => (
+  <button onClick={onClick} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all duration-300 ${active ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/30' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'}`}>
+    {icon} <span className="font-bold">{label}</span>
+  </button>
 );
 
-const TasksComponent = ({ user, tasks, users, onUpdate, onDelete, onAdd }: any) => {
-  const [note, setNote] = useState('');
+const TasksList = ({ user, tasks, users, onUpdate, onDelete, onAdd }: any) => {
+  const [noteContent, setNoteContent] = useState('');
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       {user.role === 'admin' && (
@@ -305,49 +312,71 @@ const TasksComponent = ({ user, tasks, users, onUpdate, onDelete, onAdd }: any) 
            const title = prompt("Título:");
            const desc = prompt("Descripción:");
            const hours = Number(prompt("Horas estimadas:"));
-           const userId = prompt("ID del usuario asignado (ver lista equipo):");
-           if(title && userId) onAdd({title, description: desc, assignedTo: userId, estimatedHours: hours});
-        }} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg">NUEVA TAREA</button>
+           const userId = prompt("Username del usuario asignado:");
+           const targetUser = users.find((u:any)=>u.username === userId);
+           if(title && targetUser) onAdd({title, description: desc, assignedTo: targetUser.id, estimatedHours: hours});
+           else if(title) alert('Usuario no encontrado o incompleto');
+        }} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2">
+          <Plus size={20}/> NUEVA ASIGNACIÓN
+        </button>
       )}
       <div className="grid grid-cols-1 gap-6">
         {tasks.map((t: any) => (
-          <div key={t.id} className="bg-white p-10 rounded-[40px] border border-slate-100 shadow-sm flex flex-col">
+          <div key={t.id} className="bg-white p-10 rounded-[40px] border border-slate-100 shadow-sm flex flex-col hover:shadow-md transition-shadow">
              <div className="flex justify-between items-start mb-6">
-               <div>
-                  <span className={`px-4 py-1 rounded-full text-[9px] font-black uppercase tracking-widest mb-4 inline-block ${t.status === 'completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-indigo-50 text-indigo-600'}`}>
-                    {t.status}
-                  </span>
-                  <h4 className="text-2xl font-black">{t.title}</h4>
-                  <p className="text-slate-500 mt-2">{t.description}</p>
+               <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-4">
+                    <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${t.status === 'completed' ? 'bg-emerald-50 text-emerald-600' : t.status === 'accepted' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'}`}>
+                      {t.status}
+                    </span>
+                    <span className="text-[9px] font-black text-slate-300 uppercase">EST: {t.estimatedHours}H</span>
+                  </div>
+                  <h4 className="text-2xl font-black text-slate-900 tracking-tight leading-none">{t.title}</h4>
+                  <p className="text-slate-500 mt-4 leading-relaxed font-medium">{t.description}</p>
                </div>
-               {user.role === 'admin' && <button onClick={() => onDelete(t.id)} className="text-red-400 p-2"><LogOut size={20}/></button>}
+               {user.role === 'admin' && <button onClick={() => onDelete(t.id)} className="text-slate-200 hover:text-red-500 p-2 transition-colors"><LogOut size={22}/></button>}
              </div>
              
              {user.role === 'user' && t.status !== 'completed' && (
-               <div className="mt-8 pt-8 border-t border-slate-50 flex gap-4">
+               <div className="mt-8 pt-8 border-t border-slate-50 flex flex-wrap gap-4">
                  {t.status === 'pending' ? (
-                   <button onClick={() => onUpdate(t.id, {status: 'accepted', acceptedAt: Date.now()})} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black">ACEPTAR</button>
+                   <button onClick={() => onUpdate(t.id, {status: 'accepted', acceptedAt: Date.now()})} className="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl shadow-indigo-600/20 active:scale-95 transition-all uppercase text-xs tracking-widest">ACEPTAR TAREA</button>
                  ) : (
-                   <div className="flex-1 flex gap-4">
-                      <input className="flex-1 bg-slate-50 border rounded-2xl px-6" placeholder="Escribe un avance..." value={note} onChange={e => setNote(e.target.value)} />
-                      <button onClick={() => { if(note) { onUpdate(t.id, {notes: [...t.notes, {id: Date.now().toString(), text: note, timestamp: Date.now()}]}); setNote(''); } }} className="bg-slate-900 text-white px-6 py-4 rounded-2xl font-black uppercase text-[10px]">NOTAR</button>
-                      <button onClick={() => t.notes.length > 0 ? onUpdate(t.id, {status: 'completed', completedAt: Date.now()}) : alert('Mínimo una nota.')} className="bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black">FINALIZAR</button>
+                   <div className="flex-1 flex gap-4 min-w-[300px]">
+                      <input className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all" placeholder="Escribe un avance o nota..." value={noteContent} onChange={e => setNoteContent(e.target.value)} />
+                      <button onClick={() => { if(noteContent) { onUpdate(t.id, {notes: [...t.notes, {id: Date.now().toString(), text: noteContent, timestamp: Date.now()}]}); setNoteContent(''); } }} className="bg-slate-900 text-white px-6 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest">NOTAR</button>
+                      <button onClick={() => t.notes.length > 0 ? onUpdate(t.id, {status: 'completed', completedAt: Date.now()}) : alert('Debes agregar al menos una nota de avance para finalizar.')} className="bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-emerald-600/20">FINALIZAR</button>
                    </div>
                  )}
                </div>
              )}
 
              {t.notes.length > 0 && (
-               <div className="mt-8 space-y-2">
-                 {t.notes.map((n:any) => <div key={n.id} className="bg-slate-50 p-4 rounded-2xl text-xs font-bold text-slate-600 flex justify-between"><span>{n.text}</span> <span className="text-slate-400">{new Date(n.timestamp).toLocaleTimeString()}</span></div>)}
+               <div className="mt-10 space-y-3">
+                 <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest px-2">Historial de Avance</p>
+                 {t.notes.map((n:any) => (
+                   <div key={n.id} className="bg-slate-50/50 p-5 rounded-3xl text-sm font-bold text-slate-700 flex justify-between items-center border border-slate-100/50">
+                     <span>{n.text}</span> 
+                     <span className="text-[10px] font-black text-slate-400 uppercase">{new Date(n.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                   </div>
+                 ))}
                </div>
              )}
           </div>
         ))}
+        {tasks.length === 0 && (
+          <div className="py-20 text-center bg-white rounded-[40px] border border-dashed border-slate-200">
+            <p className="text-slate-400 font-bold">No hay tareas registradas</p>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
+// --- RENDERIZADO FINAL ---
 
+const rootElement = document.getElementById('root');
+if (rootElement) {
+  ReactDOM.createRoot(rootElement).render(<App />);
+}
