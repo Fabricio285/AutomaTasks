@@ -5,7 +5,7 @@ import {
   LayoutDashboard, CheckSquare, Users, Settings, LogOut, Plus, Clock, 
   TrendingUp, RefreshCw, Trash2, X, Edit2, Database, Download, Cloud, Info, 
   Upload, ChevronRight, AlertCircle, FileJson, Github, ExternalLink, ShieldCheck,
-  AlertTriangle, Save, Wifi, WifiOff, Link2
+  AlertTriangle, Save, Wifi, WifiOff, Link2, Copy, Check
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -93,19 +93,40 @@ const calculateWorkHours = (start: number, end: number, config: BusinessHours): 
 // --- COMPONENTE PRINCIPAL ---
 
 const App = () => {
-  const [users, setUsers] = useState<User[]>([DEFAULT_ADMIN]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [businessHours, setBusinessHours] = useState<BusinessHours>(INITIAL_HOURS);
-  const [cloudId, setCloudId] = useState<string>('');
+  // Inicialización inmediata para evitar pérdida de datos al recargar
+  const [users, setUsers] = useState<User[]>(() => {
+    const saved = localStorage.getItem('taskflow_v9_autosync');
+    if (saved) return JSON.parse(saved).users || [DEFAULT_ADMIN];
+    return [DEFAULT_ADMIN];
+  });
+  
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    const saved = localStorage.getItem('taskflow_v9_autosync');
+    if (saved) return JSON.parse(saved).tasks || [];
+    return [];
+  });
+  
+  const [businessHours, setBusinessHours] = useState<BusinessHours>(() => {
+    const saved = localStorage.getItem('taskflow_v9_autosync');
+    if (saved) return JSON.parse(saved).hours || INITIAL_HOURS;
+    return INITIAL_HOURS;
+  });
+  
+  const [cloudId, setCloudId] = useState<string>(() => {
+    const saved = localStorage.getItem('taskflow_v9_autosync');
+    if (saved) return JSON.parse(saved).cloudId || '';
+    return '';
+  });
+
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [view, setView] = useState('dashboard');
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncStatus, setLastSyncStatus] = useState<'success' | 'error' | 'none'>('none');
-  const [lastUpdate, setLastUpdate] = useState<string>('');
+  const [copied, setCopied] = useState(false);
 
   const autoSaveTimer = useRef<any>(null);
 
-  // --- LÓGICA DE NUBE (npoint.io) ---
+  // --- LÓGICA DE NUBE ---
 
   const pushToCloud = async (id: string, dataToPush: any) => {
     if (!id) return;
@@ -118,7 +139,6 @@ const App = () => {
       });
       if (response.ok) {
         setLastSyncStatus('success');
-        setLastUpdate(new Date().toLocaleTimeString());
       } else {
         setLastSyncStatus('error');
       }
@@ -137,17 +157,16 @@ const App = () => {
       const data = await response.json();
       
       if (data && data.users) {
-        // Solo actualizamos si hay cambios reales para evitar re-renders infinitos
-        setUsers(prev => JSON.stringify(prev) !== JSON.stringify(data.users) ? data.users : prev);
-        setTasks(prev => JSON.stringify(prev) !== JSON.stringify(data.tasks) ? data.tasks : prev);
-        setBusinessHours(prev => JSON.stringify(prev) !== JSON.stringify(data.businessHours) ? data.businessHours : prev);
+        // Solo actualizamos si el JSON es diferente para no causar loops de render
+        if (JSON.stringify(data.users) !== JSON.stringify(users)) setUsers(data.users);
+        if (JSON.stringify(data.tasks) !== JSON.stringify(tasks)) setTasks(data.tasks);
+        if (JSON.stringify(data.businessHours) !== JSON.stringify(businessHours)) setBusinessHours(data.businessHours);
         setLastSyncStatus('success');
-        setLastUpdate(new Date().toLocaleTimeString());
       }
     } catch (e) {
       setLastSyncStatus('error');
     }
-  }, [isSyncing]);
+  }, [isSyncing, users, tasks, businessHours]);
 
   const createNewCloudId = async () => {
     setIsSyncing(true);
@@ -161,53 +180,43 @@ const App = () => {
       const result = await response.json();
       if (result.binId) {
         setCloudId(result.binId);
-        alert(`¡Base de Datos creada! ID: ${result.binId}\nComparte este ID con tu equipo.`);
+        // Guardar inmediatamente
+        localStorage.setItem('taskflow_v9_autosync', JSON.stringify({ users, tasks, hours: businessHours, cloudId: result.binId }));
+        alert(`¡Base de Datos creada exitosamente!\nTU ID ES: ${result.binId}\n\nCopia este ID y dáselo a tu equipo.`);
       }
     } catch (e) {
-      alert('Error al crear la base de datos en la nube.');
+      alert('Error de conexión con el servidor de nube.');
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // Carga inicial Local
+  // Persistencia y Auto-Save
   useEffect(() => {
-    const saved = localStorage.getItem('taskflow_v9_autosync');
-    if (saved) {
-      const d = JSON.parse(saved);
-      setUsers(d.users || [DEFAULT_ADMIN]);
-      setTasks(d.tasks || []);
-      setBusinessHours(d.hours || INITIAL_HOURS);
-      setCloudId(d.cloudId || '');
-    }
-  }, []);
-
-  // Polling: Consultar la nube cada 20 segundos
-  useEffect(() => {
-    if (cloudId) {
-      fetchFromCloud(cloudId);
-      const interval = setInterval(() => fetchFromCloud(cloudId), 20000);
-      return () => clearInterval(interval);
-    }
-  }, [cloudId, fetchFromCloud]);
-
-  // Guardar localmente y disparar Auto-Save a la nube
-  useEffect(() => {
-    localStorage.setItem('taskflow_v9_autosync', JSON.stringify({ users, tasks, hours: businessHours, cloudId }));
+    const data = { users, tasks, hours: businessHours, cloudId };
+    localStorage.setItem('taskflow_v9_autosync', JSON.stringify(data));
     
-    // Debounce de guardado en nube para no saturar la API
     if (cloudId && currentUser) {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
       autoSaveTimer.current = setTimeout(() => {
         pushToCloud(cloudId, { users, tasks, businessHours });
-      }, 3000);
+      }, 2000);
     }
-  }, [users, tasks, businessHours, cloudId]);
+  }, [users, tasks, businessHours, cloudId, currentUser]);
+
+  // Polling cada 15 seg
+  useEffect(() => {
+    if (cloudId) {
+      fetchFromCloud(cloudId);
+      const interval = setInterval(() => fetchFromCloud(cloudId), 15000);
+      return () => clearInterval(interval);
+    }
+  }, [cloudId, fetchFromCloud]);
 
   const handleLogin = (u: string, p: string) => {
     const found = users.find(usr => usr.username === u && usr.password === p);
     if (found) setCurrentUser(found);
-    else alert('Acceso denegado.');
+    else alert('Acceso incorrecto.');
   };
 
   if (!currentUser) {
@@ -224,13 +233,17 @@ const App = () => {
           <LoginForm users={users} onLogin={handleLogin} />
           
           <div className="mt-12 pt-8 border-t border-white/5 space-y-4">
-            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">ID de Sincronización (Opcional)</p>
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <Link2 size={14} className="text-indigo-500" />
+              <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">ID de Equipo (Opcional)</p>
+            </div>
             <input 
-              className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
-              placeholder="Pega el ID aquí si tu equipo ya tiene uno..."
+              className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500 text-center tracking-widest"
+              placeholder="PEGA AQUÍ EL ID DE TU EQUIPO"
               value={cloudId}
               onChange={e => setCloudId(e.target.value)}
             />
+            <p className="text-[9px] text-slate-600 font-bold">Si ya tienes un ID, pégalo para cargar tus datos automáticamente.</p>
           </div>
         </div>
       </div>
@@ -277,8 +290,8 @@ const App = () => {
             <div className={`flex items-center gap-3 px-6 py-3 rounded-2xl bg-white border border-slate-100 shadow-sm transition-all ${lastSyncStatus === 'error' ? 'border-red-200 bg-red-50' : ''}`}>
                {lastSyncStatus === 'success' ? <Wifi size={16} className="text-emerald-500 animate-pulse" /> : <WifiOff size={16} className="text-slate-300" />}
                <div className="text-left">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Sincronización</p>
-                  <p className="text-[10px] font-black text-slate-900">{cloudId ? `ID: ${cloudId}` : 'Sin Nube'}</p>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Nube Activa</p>
+                  <p className="text-[10px] font-black text-slate-900">{cloudId ? `ID: ${cloudId}` : 'Modo Local'}</p>
                </div>
             </div>
             <div className="bg-indigo-600 text-white px-8 py-3 rounded-2xl text-xs font-black uppercase flex items-center gap-2 shadow-xl shadow-indigo-600/20">
@@ -308,21 +321,20 @@ const App = () => {
         )}
         {view === 'settings' && (
           <div className="max-w-4xl space-y-12">
-            {/* Gestión Automática Nube */}
             <div className="bg-[#0f172a] p-12 rounded-[56px] shadow-2xl text-white relative overflow-hidden">
                <div className="absolute -top-20 -right-20 w-64 h-64 bg-indigo-500/20 blur-[100px] rounded-full"></div>
                <h3 className="text-3xl font-black mb-4 flex items-center gap-4"><Cloud size={40} className="text-indigo-400"/> Sincronización Automática</h3>
                <p className="text-slate-400 font-medium mb-12 max-w-xl">
-                 No más archivos manuales. Al crear o conectar un ID, los cambios se guardan automáticamente y tus compañeros los verán al instante.
+                 Si eres el administrador, genera un ID nuevo. Si ya tienes uno de tu equipo, conéctalo aquí. Una vez conectado, los cambios se guardan solos.
                </p>
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-4">
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Conectar con ID existente</p>
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">1. Conectar ID existente</p>
                     <div className="flex gap-4">
                       <input 
-                        className="flex-1 bg-white/5 border border-white/10 rounded-3xl px-8 py-5 text-white font-bold outline-none focus:ring-1 focus:ring-indigo-500"
-                        placeholder="ID de 6+ caracteres..."
+                        className="flex-1 bg-white/5 border border-white/10 rounded-3xl px-8 py-5 text-white font-bold outline-none focus:ring-1 focus:ring-indigo-500 tracking-widest"
+                        placeholder="PEGA EL ID AQUÍ..."
                         value={cloudId}
                         onChange={e => setCloudId(e.target.value)}
                       />
@@ -330,7 +342,7 @@ const App = () => {
                     </div>
                   </div>
                   <div className="space-y-4">
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Crear Nueva Base en Nube</p>
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">2. Crear Nueva Nube</p>
                     <button onClick={createNewCloudId} className="w-full bg-white text-slate-900 py-5 rounded-3xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 hover:bg-slate-100 transition-all">
                       <Plus size={18}/> GENERAR NUEVO SYNC ID
                     </button>
@@ -338,27 +350,31 @@ const App = () => {
                </div>
 
                {cloudId && (
-                 <div className="mt-12 p-6 bg-white/5 rounded-3xl border border-white/5 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                       <Link2 size={24} className="text-indigo-400" />
+                 <div className="mt-12 p-8 bg-indigo-600/20 rounded-[40px] border border-indigo-500/30 flex items-center justify-between">
+                    <div className="flex items-center gap-6">
+                       <div className="bg-indigo-600 p-4 rounded-3xl"><Link2 size={24} className="text-white" /></div>
                        <div>
-                          <p className="text-[10px] font-black text-slate-500 uppercase">Tu ID de Equipo:</p>
-                          <p className="text-xl font-black tracking-widest text-white">{cloudId}</p>
+                          <p className="text-[10px] font-black text-indigo-300 uppercase tracking-[0.2em] mb-1">Tu ID para compartir:</p>
+                          <p className="text-2xl font-black tracking-[0.3em] text-white">{cloudId}</p>
                        </div>
                     </div>
-                    <button onClick={() => { navigator.clipboard.writeText(cloudId); alert('¡Copiado!'); }} className="text-[10px] font-black uppercase text-indigo-400 hover:text-white transition-colors">Copiar ID</button>
+                    <button 
+                      onClick={() => { navigator.clipboard.writeText(cloudId); setCopied(true); setTimeout(()=>setCopied(false), 2000); }} 
+                      className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black uppercase text-[10px] transition-all ${copied ? 'bg-emerald-500 text-white' : 'bg-white text-slate-900'}`}
+                    >
+                      {copied ? <Check size={14}/> : <Copy size={14}/>} {copied ? 'COPIADO' : 'COPIAR ID'}
+                    </button>
                  </div>
                )}
             </div>
 
-            {/* Horarios Operativos */}
             <div className="bg-white p-12 rounded-[56px] shadow-sm border border-slate-100">
               <h3 className="text-2xl font-black mb-8 flex items-center gap-4"><Clock className="text-indigo-600"/> Horarios Operativos</h3>
               <div className="space-y-3">
                 {Object.entries(businessHours).map(([day, config]: any) => (
                   <div key={day} className={`flex items-center justify-between p-6 rounded-[32px] border transition-all ${config.active ? 'bg-slate-50' : 'opacity-30 grayscale'}`}>
                     <div className="flex items-center gap-6">
-                      <input type="checkbox" checked={config.active} onChange={e => setBusinessHours({...businessHours, [day]: {...config, active: e.target.checked}})} className="w-6 h-6 rounded-lg accent-indigo-600" />
+                      <input type="checkbox" checked={config.active} onChange={e => setBusinessHours({...businessHours, [day]: {...config, active: e.target.checked}})} className="w-6 h-6 rounded-lg accent-indigo-600 cursor-pointer" />
                       <span className="font-black uppercase text-xs tracking-widest w-24">Día {day}</span>
                     </div>
                     <div className="flex gap-4">
@@ -368,32 +384,6 @@ const App = () => {
                   </div>
                 ))}
               </div>
-            </div>
-            
-            <div className="flex flex-col md:flex-row gap-6 pb-20">
-               <button onClick={() => {
-                  const data = { users, tasks, businessHours, cloudId };
-                  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a'); a.href = url; a.download = 'backup_taskflow.json'; a.click();
-               }} className="flex-1 bg-white p-8 rounded-[40px] border border-slate-100 text-left hover:border-indigo-500 transition-all group shadow-sm">
-                  <Download className="text-slate-300 mb-4 group-hover:text-indigo-500 transition-colors" size={32} />
-                  <p className="font-black text-slate-900">Backup Local</p>
-                  <p className="text-xs text-slate-400 font-medium">Exportar todo el sistema a un archivo JSON.</p>
-               </button>
-               <label className="flex-1 bg-white p-8 rounded-[40px] border border-slate-100 text-left hover:border-indigo-500 transition-all group shadow-sm cursor-pointer">
-                  <Upload className="text-slate-300 mb-4 group-hover:text-indigo-500 transition-colors" size={32} />
-                  <p className="font-black text-slate-900">Restaurar Sistema</p>
-                  <p className="text-xs text-slate-400 font-medium">Cargar una base de datos desde un archivo.</p>
-                  <input type="file" className="hidden" accept=".json" onChange={(e:any) => {
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                      const data = JSON.parse(ev.target?.result as string);
-                      if (data.users) { setUsers(data.users); setTasks(data.tasks || []); setCloudId(data.cloudId || ''); alert('Restaurado.'); }
-                    };
-                    reader.readAsText(e.target.files[0]);
-                  }} />
-               </label>
             </div>
           </div>
         )}
@@ -409,21 +399,21 @@ const LoginForm = ({ users, onLogin }: any) => {
   const [p, setP] = useState('');
   return (
     <form className="space-y-6" onSubmit={e => { e.preventDefault(); onLogin(u, p); }}>
-      <select className="w-full px-8 py-5 bg-white/5 border border-white/10 rounded-2xl text-white font-bold outline-none cursor-pointer appearance-none" value={u} onChange={e => setU(e.target.value)} required>
-        <option value="" disabled className="bg-[#0a0f1d]">Selecciona Perfil</option>
-        {users.map((usr: any) => <option key={usr.id} value={usr.username} className="bg-[#0a0f1d]">{usr.name} (@{usr.username})</option>)}
+      <select className="w-full px-8 py-5 bg-white/5 border border-white/10 rounded-2xl text-white font-bold outline-none cursor-pointer appearance-none text-center" value={u} onChange={e => setU(e.target.value)} required>
+        <option value="" disabled className="bg-[#0a0f1d]">-- Selecciona Perfil --</option>
+        {users.map((usr: any) => <option key={usr.id} value={usr.username} className="bg-[#0a0f1d]">{usr.name}</option>)}
       </select>
-      <input type="password" placeholder="Contraseña" className="w-full px-8 py-5 bg-white/5 border border-white/10 rounded-2xl text-white font-bold outline-none focus:ring-1 focus:ring-indigo-500" value={p} onChange={e => setP(e.target.value)} required />
-      <button className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl hover:bg-indigo-500 transition-all active:scale-95 shadow-indigo-600/20">ACCEDER AL PANEL</button>
+      <input type="password" placeholder="Clave de Acceso" className="w-full px-8 py-5 bg-white/5 border border-white/10 rounded-2xl text-white font-bold outline-none focus:ring-1 focus:ring-indigo-500 text-center" value={p} onChange={e => setP(e.target.value)} required />
+      <button className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl hover:bg-indigo-500 transition-all active:scale-95 shadow-indigo-600/20 uppercase tracking-widest text-xs">ENTRAR AL SISTEMA</button>
     </form>
   );
 };
 
 const DashboardView = ({ tasks, users, hours, role }: any) => {
   const stats = [
-    { label: 'Pendientes', val: tasks.filter((t:any)=>t.status==='pending').length, color: 'bg-amber-500' },
-    { label: 'En Proceso', val: tasks.filter((t:any)=>t.status==='accepted').length, color: 'bg-indigo-600' },
-    { label: 'Completas', val: tasks.filter((t:any)=>t.status==='completed').length, color: 'bg-emerald-500' },
+    { label: 'Por Hacer', val: tasks.filter((t:any)=>t.status==='pending').length, color: 'bg-amber-500' },
+    { label: 'Activas', val: tasks.filter((t:any)=>t.status==='accepted').length, color: 'bg-indigo-600' },
+    { label: 'Cerradas', val: tasks.filter((t:any)=>t.status==='completed').length, color: 'bg-emerald-500' },
   ];
 
   const efficiency = users.filter((u:any)=>u.role==='user').map((u:any) => {
@@ -475,7 +465,7 @@ const TasksView = ({ tasks, users, role, onAdd, onUpdate, onDelete }: any) => {
     <div className="space-y-8 animate-in fade-in duration-500">
       {role === 'admin' && (
         <button onClick={() => setShowModal(true)} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2 active:scale-95 shadow-indigo-600/20">
-          <Plus size={20}/> NUEVA ASIGNACIÓN
+          <Plus size={20}/> NUEVA TAREA
         </button>
       )}
       <div className="grid grid-cols-1 gap-6">
@@ -487,7 +477,7 @@ const TasksView = ({ tasks, users, role, onAdd, onUpdate, onDelete }: any) => {
                     <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${t.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : t.status === 'accepted' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-amber-50 text-amber-600 border border-amber-100'}`}>
                       {t.status === 'completed' ? 'Finalizada' : t.status === 'accepted' ? 'Ejecutando' : 'Pendiente'}
                     </span>
-                    <span className="text-[9px] font-black text-slate-300 uppercase">Estimado: {t.estimatedHours}h</span>
+                    <span className="text-[9px] font-black text-slate-300 uppercase">Est: {t.estimatedHours}h</span>
                     <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">→ {users.find((u:any)=>u.id === t.assignedTo)?.name}</span>
                   </div>
                   <h4 className="text-2xl font-black text-slate-900 tracking-tight leading-none group-hover:text-indigo-600 transition-colors">{t.title}</h4>
@@ -499,12 +489,12 @@ const TasksView = ({ tasks, users, role, onAdd, onUpdate, onDelete }: any) => {
              {role === 'user' && t.status !== 'completed' && (
                <div className="mt-8 pt-8 border-t flex flex-wrap gap-4">
                  {t.status === 'pending' ? (
-                   <button onClick={() => onUpdate(t.id, {status: 'accepted', acceptedAt: Date.now()})} className="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl active:scale-95 transition-all">COMENZAR TAREA</button>
+                   <button onClick={() => onUpdate(t.id, {status: 'accepted', acceptedAt: Date.now()})} className="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl active:scale-95 transition-all">EMPEZAR LABOR</button>
                  ) : (
                    <div className="flex-1 flex gap-4 min-w-[350px]">
-                      <input className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 font-bold outline-none focus:ring-1 focus:ring-indigo-500" placeholder="Escribe tu avance..." value={note} onChange={e => setNote(e.target.value)} />
-                      <button onClick={() => { if(note) { onUpdate(t.id, {notes: [...t.notes, {id: Date.now().toString(), text: note, timestamp: Date.now()}]}); setNote(''); } }} className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest">REGISTRAR</button>
-                      <button onClick={() => t.notes.length > 0 ? onUpdate(t.id, {status: 'completed', completedAt: Date.now()}) : alert('Debes agregar un reporte.')} className="bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl active:scale-95 transition-all shadow-emerald-600/20">TERMINAR</button>
+                      <input className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 font-bold outline-none focus:ring-1 focus:ring-indigo-500" placeholder="Añade un reporte de avance..." value={note} onChange={e => setNote(e.target.value)} />
+                      <button onClick={() => { if(note) { onUpdate(t.id, {notes: [...t.notes, {id: Date.now().toString(), text: note, timestamp: Date.now()}]}); setNote(''); } }} className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest">AÑADIR</button>
+                      <button onClick={() => t.notes.length > 0 ? onUpdate(t.id, {status: 'completed', completedAt: Date.now()}) : alert('Debes agregar al menos una nota de avance para terminar.')} className="bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl active:scale-95 transition-all shadow-emerald-600/20">FINALIZAR</button>
                    </div>
                  )}
                </div>
@@ -512,7 +502,7 @@ const TasksView = ({ tasks, users, role, onAdd, onUpdate, onDelete }: any) => {
              
              {t.notes.length > 0 && (
                <div className="mt-8 space-y-2">
-                 <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest ml-2">Historial de Reportes</p>
+                 <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest ml-2">Reportes de Avance</p>
                  {t.notes.map((n:any)=>(
                    <div key={n.id} className="bg-slate-50/50 p-4 rounded-3xl text-[13px] font-bold text-slate-600 flex justify-between border border-slate-100/50">
                      <span>{n.text}</span>
@@ -529,19 +519,19 @@ const TasksView = ({ tasks, users, role, onAdd, onUpdate, onDelete }: any) => {
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl flex items-center justify-center p-8 z-[60] animate-in fade-in duration-300">
           <div className="bg-white p-12 rounded-[56px] w-full max-w-md shadow-2xl relative">
              <button onClick={() => setShowModal(false)} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500"><X size={24}/></button>
-             <h3 className="text-3xl font-black mb-8 tracking-tighter text-slate-900">Asignar Labor</h3>
+             <h3 className="text-3xl font-black mb-8 tracking-tighter text-slate-900">Asignar Tarea</h3>
              <div className="space-y-4">
                 <input placeholder="Título de la tarea" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.title} onChange={e => setF({...f, title: e.target.value})} />
                 <textarea placeholder="Descripción del trabajo..." className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-medium h-32 outline-none resize-none focus:ring-2 focus:ring-indigo-500" value={f.description} onChange={e => setF({...f, description: e.target.value})} />
                 <div className="grid grid-cols-2 gap-4">
                   <input type="number" placeholder="Horas" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none" value={f.estimatedHours} onChange={e => setF({...f, estimatedHours: Number(e.target.value)})} />
                   <select className="w-full px-6 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none cursor-pointer" value={f.assignedTo} onChange={e => setF({...f, assignedTo: e.target.value})}>
-                      <option value="" disabled>Responsable</option>
+                      <option value="" disabled>Seleccionar Persona</option>
                       {users.filter((u:any)=>u.role==='user').map((u:any)=><option key={u.id} value={u.id}>{u.name}</option>)}
                   </select>
                 </div>
              </div>
-             <button onClick={() => { if(f.title && f.assignedTo) { onAdd(f); setShowModal(false); } else alert('Completa los campos.'); }} className="w-full bg-indigo-600 text-white py-6 rounded-3xl font-black shadow-xl mt-8 uppercase tracking-widest text-sm hover:bg-indigo-700 active:scale-95 transition-all shadow-indigo-600/30">PUBLICAR TAREA</button>
+             <button onClick={() => { if(f.title && f.assignedTo) { onAdd(f); setShowModal(false); } else alert('Completa los campos.'); }} className="w-full bg-indigo-600 text-white py-6 rounded-3xl font-black shadow-xl mt-8 uppercase tracking-widest text-sm hover:bg-indigo-700 active:scale-95 transition-all shadow-indigo-600/30">PUBLICAR</button>
           </div>
         </div>
       )}
@@ -554,7 +544,7 @@ const UsersView = ({ users, onAdd, onUpdate, onDelete }: any) => {
   const [f, setF] = useState({ name: '', username: '', password: '', role: 'user' as Role });
 
   const handleSave = () => {
-    if (!f.name || !f.username || !f.password) return alert('Completa todos los campos');
+    if (!f.name || !f.username || !f.password) return alert('Datos incompletos.');
     if (modal.editing) onUpdate(modal.editing, f);
     else onAdd(f);
     setModal({ open: false, editing: null });
@@ -563,7 +553,7 @@ const UsersView = ({ users, onAdd, onUpdate, onDelete }: any) => {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
-        <h3 className="text-2xl font-black uppercase tracking-widest text-slate-400">Nuestro Equipo</h3>
+        <h3 className="text-2xl font-black uppercase tracking-widest text-slate-400">Equipo de Trabajo</h3>
         <button onClick={() => { setModal({open:true, editing:null}); setF({name:'',username:'',password:'',role:'user'}); }} className="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 flex items-center gap-2 active:scale-95 transition-all">
           <Plus size={20}/> NUEVO PERFIL
         </button>
@@ -588,15 +578,15 @@ const UsersView = ({ users, onAdd, onUpdate, onDelete }: any) => {
              <button onClick={() => setModal({open: false, editing: null})} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500"><X size={24}/></button>
              <h3 className="text-3xl font-black mb-8 tracking-tighter text-slate-900">{modal.editing ? 'Editar' : 'Crear'} Acceso</h3>
              <div className="space-y-4">
-                <input placeholder="Nombre Real" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none" value={f.name} onChange={e => setF({...f, name: e.target.value})} />
-                <input placeholder="Usuario (Login)" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none" value={f.username} onChange={e => setF({...f, username: e.target.value})} />
-                <input type="password" placeholder="Clave de acceso" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none" value={f.password} onChange={e => setF({...f, password: e.target.value})} />
+                <input placeholder="Nombre Completo" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none" value={f.name} onChange={e => setF({...f, name: e.target.value})} />
+                <input placeholder="Usuario (para entrar)" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none" value={f.username} onChange={e => setF({...f, username: e.target.value})} />
+                <input type="password" placeholder="Clave" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none" value={f.password} onChange={e => setF({...f, password: e.target.value})} />
                 <select className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none cursor-pointer appearance-none" value={f.role} onChange={e => setF({...f, role: e.target.value as Role})}>
                     <option value="user">USER (Colaborador)</option>
                     <option value="admin">ADMIN (Administrador)</option>
                 </select>
              </div>
-             <button onClick={handleSave} className="w-full bg-indigo-600 text-white py-6 rounded-3xl font-black mt-10 shadow-xl shadow-indigo-600/30 uppercase text-sm tracking-widest transition-all active:scale-95">GUARDAR PERFIL</button>
+             <button onClick={handleSave} className="w-full bg-indigo-600 text-white py-6 rounded-3xl font-black mt-10 shadow-xl shadow-indigo-600/30 uppercase text-sm tracking-widest transition-all active:scale-95">GUARDAR</button>
           </div>
         </div>
       )}
