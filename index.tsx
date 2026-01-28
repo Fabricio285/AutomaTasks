@@ -4,7 +4,8 @@ import ReactDOM from 'react-dom/client';
 import { 
   LayoutDashboard, CheckSquare, Users, Settings, LogOut, Plus, Clock, 
   TrendingUp, RefreshCw, Trash2, X, Edit2, Database, Download, Cloud, Info, 
-  Upload, ChevronRight, AlertCircle, FileJson, Github, ExternalLink, ShieldCheck
+  Upload, ChevronRight, AlertCircle, FileJson, Github, ExternalLink, ShieldCheck,
+  AlertTriangle, Save
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -68,12 +69,10 @@ const DEFAULT_ADMIN: User = {
 // --- UTILIDADES ---
 const convertCloudLink = (url: string): string => {
   if (!url) return '';
-  // Convertir link de Drive
   if (url.includes('drive.google.com/file/d/')) {
     const id = url.split('/d/')[1].split('/')[0];
     return `https://docs.google.com/uc?export=download&id=${id}`;
   }
-  // Convertir link de GitHub normal a Raw
   if (url.includes('github.com') && !url.includes('raw.githubusercontent.com')) {
     return url.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/');
   }
@@ -113,58 +112,87 @@ const App = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [view, setView] = useState('dashboard');
   const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSync, setLastSync] = useState<string>('Nunca');
+  const [lastSync, setLastSync] = useState<string>('Local');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Carga inicial
+  // Carga inicial (Solo Local para evitar sobrescritura accidental)
   useEffect(() => {
-    const saved = localStorage.getItem('taskflow_v7_data');
+    const saved = localStorage.getItem('taskflow_v8_data');
     if (saved) {
       try {
         const d = JSON.parse(saved);
-        setUsers(d.users || [DEFAULT_ADMIN]);
+        // Validar que siempre tengamos al menos al admin
+        let userList = d.users || [DEFAULT_ADMIN];
+        if (!userList.some((u: User) => u.username === 'Automa_5')) {
+          userList = [DEFAULT_ADMIN, ...userList];
+        }
+        setUsers(userList);
         setTasks(d.tasks || []);
         setBusinessHours(d.hours || INITIAL_HOURS);
         setSyncUrl(d.syncUrl || '');
-        if (d.syncUrl) syncWithCloud(d.syncUrl);
-      } catch (e) { console.error("Error al cargar local", e); }
+        setLastSync(d.lastSync || 'Local');
+      } catch (e) { 
+        console.error("Error al cargar local", e); 
+        setUsers([DEFAULT_ADMIN]);
+      }
     }
   }, []);
 
-  // Persistencia local
+  // Persistencia local automática cada vez que algo cambie
   useEffect(() => {
-    localStorage.setItem('taskflow_v7_data', JSON.stringify({ users, tasks, hours: businessHours, syncUrl }));
-  }, [users, tasks, businessHours, syncUrl]);
+    localStorage.setItem('taskflow_v8_data', JSON.stringify({ 
+      users, 
+      tasks, 
+      hours: businessHours, 
+      syncUrl,
+      lastSync 
+    }));
+  }, [users, tasks, businessHours, syncUrl, lastSync]);
 
-  const syncWithCloud = async (urlOverride?: string) => {
+  const syncWithCloud = async (urlOverride?: string, force = false) => {
     const url = urlOverride || syncUrl;
     if (!url) return;
+
+    if (!force) {
+      const confirmSync = confirm("ADVERTENCIA: Esta acción descargará la base de datos de la nube y SOBRESCRIBIRÁ todos tus cambios locales actuales. ¿Estás seguro?");
+      if (!confirmSync) return;
+    }
+
     setIsSyncing(true);
     try {
       const directUrl = convertCloudLink(url);
-      // Intentamos fetch directo, si falla usamos proxy para saltar CORS
-      let response;
+      let data;
+
       try {
-        response = await fetch(directUrl, { cache: 'no-store' });
+        const response = await fetch(directUrl, { cache: 'no-store' });
+        if (!response.ok) throw new Error();
+        data = await response.json();
       } catch (e) {
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(directUrl)}`;
+        // Fallback a proxy si falla CORS
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(directUrl)}&timestamp=${Date.now()}`;
         const proxyRes = await fetch(proxyUrl);
         const proxyData = await proxyRes.json();
-        response = { ok: true, json: () => Promise.resolve(JSON.parse(proxyData.contents)) };
+        data = JSON.parse(proxyData.contents);
       }
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.users && data.tasks) {
-          setUsers(data.users);
-          setTasks(data.tasks);
-          if (data.businessHours) setBusinessHours(data.businessHours);
-          setLastSync(new Date().toLocaleTimeString());
+      if (data && data.users && Array.isArray(data.users)) {
+        // Asegurar que Automa_5 siempre esté
+        let newUserList = data.users;
+        if (!newUserList.some((u: User) => u.username === 'Automa_5')) {
+          newUserList = [DEFAULT_ADMIN, ...newUserList];
         }
+        setUsers(newUserList);
+        setTasks(data.tasks || []);
+        if (data.businessHours) setBusinessHours(data.businessHours);
+        setLastSync(new Date().toLocaleTimeString());
+        alert('Sincronización exitosa. Datos actualizados desde la nube.');
+      } else {
+        alert('El archivo en la nube no tiene un formato válido.');
       }
     } catch (error) {
       console.error("Cloud Sync Error:", error);
+      alert('Error al conectar con la nube. Verifica el enlace y que el archivo sea público.');
     } finally {
       setIsSyncing(false);
     }
@@ -190,7 +218,7 @@ const App = () => {
           <div className="mt-8 flex items-center justify-center gap-2">
             <div className={`w-2 h-2 rounded-full ${syncUrl ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`}></div>
             <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">
-              {syncUrl ? 'Sincronizado con la nube' : 'Modo local activo'}
+              {syncUrl ? `Sincronización habilitada (${lastSync})` : 'Modo local activo'}
             </p>
           </div>
         </div>
@@ -236,8 +264,8 @@ const App = () => {
           <h2 className="text-4xl font-black text-slate-900 tracking-tighter capitalize">{view}</h2>
           <div className="flex items-center gap-4">
             {syncUrl && (
-              <button onClick={() => syncWithCloud()} className="bg-white border px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 flex items-center gap-2 shadow-sm">
-                <RefreshCw size={14} className={isSyncing ? 'animate-spin text-indigo-500' : ''} /> {isSyncing ? 'Sincronizando...' : `Refrescar (${lastSync})`}
+              <button onClick={() => syncWithCloud()} className="bg-white border px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 flex items-center gap-2 shadow-sm transition-all active:scale-95">
+                <RefreshCw size={14} className={isSyncing ? 'animate-spin text-indigo-500' : ''} /> {isSyncing ? 'Sincronizando...' : `Refrescar Nube`}
               </button>
             )}
             <div className="bg-indigo-600 text-white px-6 py-3 rounded-2xl text-xs font-black uppercase flex items-center gap-2">
@@ -281,11 +309,15 @@ const App = () => {
             onImport={(e:any) => {
               const reader = new FileReader();
               reader.onload = (ev) => {
-                const data = JSON.parse(ev.target?.result as string);
-                if (data.users && data.tasks) {
-                  setUsers(data.users); setTasks(data.tasks); setBusinessHours(data.businessHours || INITIAL_HOURS);
-                  alert('Base de datos cargada.');
-                }
+                try {
+                  const data = JSON.parse(ev.target?.result as string);
+                  if (data.users) {
+                    setUsers(data.users); 
+                    setTasks(data.tasks || []); 
+                    setBusinessHours(data.businessHours || INITIAL_HOURS);
+                    alert('Base de datos local actualizada.');
+                  }
+                } catch(err) { alert('Archivo inválido.'); }
               };
               reader.readAsText(e.target.files[0]);
             }}
@@ -303,7 +335,7 @@ const LoginForm = ({ users, onLogin }: any) => {
   const [p, setP] = useState('');
   return (
     <form className="space-y-6" onSubmit={e => { e.preventDefault(); onLogin(u, p); }}>
-      <select className="w-full px-8 py-5 bg-white/5 border border-white/10 rounded-2xl text-white font-bold outline-none" value={u} onChange={e => setU(e.target.value)} required>
+      <select className="w-full px-8 py-5 bg-white/5 border border-white/10 rounded-2xl text-white font-bold outline-none cursor-pointer" value={u} onChange={e => setU(e.target.value)} required>
         <option value="" disabled className="bg-[#0a0f1d]">Selecciona Perfil</option>
         {users.map((usr: any) => <option key={usr.id} value={usr.username} className="bg-[#0a0f1d]">{usr.name} (@{usr.username})</option>)}
       </select>
@@ -340,7 +372,7 @@ const DashboardView = ({ tasks, users, hours, role }: any) => {
           </div>
         ))}
       </div>
-      {role === 'admin' && (
+      {role === 'admin' && efficiency.length > 0 && (
         <div className="bg-white p-12 rounded-[48px] border border-slate-100 shadow-sm h-[500px]">
           <h3 className="text-xl font-black mb-12 flex items-center gap-3"><TrendingUp className="text-indigo-600"/> Eficiencia del Equipo (%)</h3>
           <ResponsiveContainer width="100%" height="100%">
@@ -385,7 +417,7 @@ const TasksView = ({ tasks, users, role, onAdd, onUpdate, onDelete }: any) => {
                   <h4 className="text-2xl font-black text-slate-900 tracking-tight leading-none">{t.title}</h4>
                   <p className="text-slate-500 mt-4 leading-relaxed font-medium">{t.description}</p>
                </div>
-               {role === 'admin' && <button onClick={() => onDelete(t.id)} className="text-slate-200 hover:text-red-500 p-2"><Trash2/></button>}
+               {role === 'admin' && <button onClick={() => confirm('¿Borrar?') && onDelete(t.id)} className="text-slate-200 hover:text-red-500 p-2 transition-all"><Trash2/></button>}
              </div>
              {role === 'user' && t.status !== 'completed' && (
                <div className="mt-8 pt-8 border-t flex flex-wrap gap-4">
@@ -417,7 +449,8 @@ const TasksView = ({ tasks, users, role, onAdd, onUpdate, onDelete }: any) => {
                 <input placeholder="Título" className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-bold outline-none" value={f.title} onChange={e => setF({...f, title: e.target.value})} />
                 <textarea placeholder="Descripción..." className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-medium h-32 outline-none resize-none" value={f.description} onChange={e => setF({...f, description: e.target.value})} />
                 <input type="number" placeholder="Horas" className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-bold outline-none" value={f.estimatedHours} onChange={e => setF({...f, estimatedHours: Number(e.target.value)})} />
-                <select className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-bold outline-none" value={f.assignedTo} onChange={e => setF({...f, assignedTo: e.target.value})}>
+                {/* Fixed line 452 (in original source line numbers might differ slightly, but this addresses the value=\"\" error): Changed escaped quotes to standard JSX string literal. */}
+                <select className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-bold outline-none cursor-pointer" value={f.assignedTo} onChange={e => setF({...f, assignedTo: e.target.value})}>
                     <option value="" disabled>Seleccionar Colaborador</option>
                     {users.filter((u:any)=>u.role==='user').map((u:any)=><option key={u.id} value={u.id}>{u.name}</option>)}
                 </select>
@@ -451,10 +484,10 @@ const UsersView = ({ users, onAdd, onUpdate, onDelete }: any) => {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {users.map((u:User) => (
-          <div key={u.id} className="bg-white p-10 rounded-[48px] border border-slate-100 text-center flex flex-col items-center relative group">
+          <div key={u.id} className="bg-white p-10 rounded-[48px] border border-slate-100 text-center flex flex-col items-center relative group shadow-sm transition-all hover:border-indigo-200">
             <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button onClick={() => { setModal({open:true, editing:u.id}); setF({name:u.name,username:u.username,password:u.password||'',role:u.role}); }} className="p-3 bg-indigo-50 text-indigo-500 rounded-2xl"><Edit2 size={16}/></button>
-              <button onClick={() => onDelete(u.id)} className="p-3 bg-red-50 text-red-500 rounded-2xl"><Trash2 size={16}/></button>
+              <button onClick={() => { setModal({open:true, editing:u.id}); setF({name:u.name,username:u.username,password:u.password||'',role:u.role}); }} className="p-3 bg-indigo-50 text-indigo-500 rounded-2xl hover:bg-indigo-500 hover:text-white transition-all"><Edit2 size={16}/></button>
+              <button onClick={() => onDelete(u.id)} className="p-3 bg-red-50 text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
             </div>
             <div className={`w-20 h-20 rounded-[28px] flex items-center justify-center font-black text-2xl mb-6 shadow-xl ${u.role === 'admin' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{u.name[0]}</div>
             <p className="font-black text-xl mb-1 text-slate-900">{u.name}</p>
@@ -472,12 +505,12 @@ const UsersView = ({ users, onAdd, onUpdate, onDelete }: any) => {
                 <input placeholder="Nombre Real" className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-bold outline-none" value={f.name} onChange={e => setF({...f, name: e.target.value})} />
                 <input placeholder="Usuario (Login)" className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-bold outline-none" value={f.username} onChange={e => setF({...f, username: e.target.value})} />
                 <input type="password" placeholder="Clave" className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-bold outline-none" value={f.password} onChange={e => setF({...f, password: e.target.value})} />
-                <select className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-bold outline-none" value={f.role} onChange={e => setF({...f, role: e.target.value as Role})}>
+                <select className="w-full px-8 py-5 bg-slate-50 border rounded-3xl font-bold outline-none cursor-pointer" value={f.role} onChange={e => setF({...f, role: e.target.value as Role})}>
                     <option value="user">USER (Colaborador)</option>
                     <option value="admin">ADMIN (Administrador)</option>
                 </select>
              </div>
-             <button onClick={handleSave} className="w-full bg-indigo-600 text-white py-5 rounded-3xl font-black mt-10 shadow-xl shadow-indigo-600/30 uppercase text-xs tracking-widest">GUARDAR</button>
+             <button onClick={handleSave} className="w-full bg-indigo-600 text-white py-5 rounded-3xl font-black mt-10 shadow-xl shadow-indigo-600/30 uppercase text-xs tracking-widest transition-all active:scale-95">GUARDAR</button>
           </div>
         </div>
       )}
@@ -494,7 +527,7 @@ const SettingsView = ({ syncUrl, setSyncUrl, hours, setHours, onSync, onExport, 
           {Object.entries(hours).map(([day, config]: any) => (
             <div key={day} className={`flex items-center justify-between p-6 rounded-[32px] border transition-all ${config.active ? 'bg-slate-50' : 'opacity-30 grayscale'}`}>
               <div className="flex items-center gap-6">
-                <input type="checkbox" checked={config.active} onChange={e => setHours({...hours, [day]: {...config, active: e.target.checked}})} className="w-6 h-6 rounded-lg accent-indigo-600" />
+                <input type="checkbox" checked={config.active} onChange={e => setHours({...hours, [day]: {...config, active: e.target.checked}})} className="w-6 h-6 rounded-lg accent-indigo-600 cursor-pointer" />
                 <span className="font-black uppercase text-xs tracking-widest w-24">Día {day}</span>
               </div>
               <div className="flex gap-4">
@@ -506,33 +539,47 @@ const SettingsView = ({ syncUrl, setSyncUrl, hours, setHours, onSync, onExport, 
         </div>
       </div>
 
-      <div className="bg-[#0f172a] p-12 rounded-[48px] shadow-2xl text-white space-y-8">
+      <div className="bg-[#0f172a] p-12 rounded-[48px] shadow-2xl text-white space-y-8 border border-white/5">
         <h3 className="text-2xl font-black flex items-center gap-4"><Cloud className="text-indigo-400" /> Sincronización en la Nube</h3>
+        
+        <div className="bg-amber-500/10 p-6 rounded-3xl border border-amber-500/20 flex gap-4 items-center">
+          <AlertTriangle className="text-amber-500 shrink-0" size={24} />
+          <p className="text-[11px] font-bold text-amber-200 uppercase leading-relaxed">
+            Importante: Si haces cambios locales (nuevas tareas/usuarios), debes **Exportar** y subir el archivo a GitHub manualmente antes de **Sincronizar**. Sincronizar descargará lo que está en la nube y borrará tus cambios locales no guardados en el archivo.
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
           <div className="space-y-4">
             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Enlace de la Base de Datos</p>
             <input type="text" placeholder="GitHub Raw o Google Drive link..." className="w-full px-6 py-4 bg-white/5 border border-white/10 rounded-2xl font-bold text-xs outline-none focus:ring-2 focus:ring-indigo-500" value={syncUrl} onChange={e => setSyncUrl(e.target.value)} />
-            <button onClick={onSync} className="w-full bg-indigo-600 text-white py-4 rounded-3xl font-black uppercase text-xs flex items-center justify-center gap-3">
-              <RefreshCw size={18} /> Sincronizar Ahora
+            <button onClick={onSync} className="w-full bg-indigo-600 text-white py-4 rounded-3xl font-black uppercase text-xs flex items-center justify-center gap-3 shadow-xl shadow-indigo-600/20 active:scale-95 transition-all">
+              <RefreshCw size={18} /> Importar desde Nube
             </button>
           </div>
           <div className="space-y-4">
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Carga Manual / Backup</p>
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Flujo de Trabajo Manual</p>
             <div className="flex flex-col gap-3">
-              <button onClick={onExport} className="bg-white text-slate-900 py-4 rounded-3xl font-black uppercase text-xs flex items-center justify-center gap-3"><Download size={18}/> Descargar database.json</button>
-              <label className="bg-white/10 text-white py-4 rounded-3xl font-black uppercase text-xs flex items-center justify-center gap-3 cursor-pointer"><Upload size={18}/> Cargar database.json <input type="file" className="hidden" accept=".json" onChange={onImport} /></label>
+              <button onClick={onExport} className="bg-white text-slate-900 py-4 rounded-3xl font-black uppercase text-xs flex items-center justify-center gap-3 hover:bg-slate-100 transition-all active:scale-95 shadow-xl">
+                <Download size={18}/> 1. Exportar database.json
+              </button>
+              <label className="bg-white/10 text-white py-4 rounded-3xl font-black uppercase text-xs flex items-center justify-center gap-3 cursor-pointer hover:bg-white/20 transition-all active:scale-95 border border-white/10">
+                <Upload size={18}/> Cargar Backup Local <input type="file" className="hidden" accept=".json" onChange={onImport} />
+              </label>
             </div>
           </div>
         </div>
-        <div className="bg-white/5 p-6 rounded-3xl border border-white/5 space-y-3">
-           <p className="text-[11px] font-black text-indigo-400 uppercase">Recomendación para Multiusuario:</p>
-           <ol className="text-[10px] text-slate-400 space-y-2 font-bold uppercase">
-             <li>1. Haz clic en "Descargar database.json" arriba.</li>
-             <li>2. Sube ese archivo a un Repositorio en GitHub.</li>
-             <li>3. Abre el archivo en GitHub y haz clic en el botón "RAW".</li>
-             <li>4. Copia esa URL de la barra de direcciones y pégala arriba.</li>
-             <li className="text-emerald-400">→ ¡Esto evitará errores de conexión y será mucho más rápido que Drive!</li>
-           </ol>
+        
+        <div className="bg-white/5 p-8 rounded-[40px] border border-white/5 space-y-4">
+           <p className="text-xs font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2">
+             <Info size={16}/> Instrucciones para Multiusuario:
+           </p>
+           <ul className="text-[10px] text-slate-400 space-y-3 font-bold uppercase">
+             <li className="flex items-center gap-3"><span className="w-5 h-5 bg-white/10 rounded-full flex items-center justify-center text-[10px] text-white">1</span> Haz tus cambios (usuarios, tareas).</li>
+             <li className="flex items-center gap-3"><span className="w-5 h-5 bg-white/10 rounded-full flex items-center justify-center text-[10px] text-white">2</span> Clic en "1. Exportar database.json" (Descarga a tu PC).</li>
+             <li className="flex items-center gap-3"><span className="w-5 h-5 bg-white/10 rounded-full flex items-center justify-center text-[10px] text-white">3</span> Sube ese archivo a GitHub reemplazando el viejo.</li>
+             <li className="flex items-center gap-3 text-emerald-400"><span className="w-5 h-5 bg-emerald-500/20 rounded-full flex items-center justify-center text-[10px] text-emerald-400">4</span> Clic en "Importar desde Nube" para confirmar la sincronización.</li>
+           </ul>
         </div>
       </div>
     </div>
@@ -540,8 +587,8 @@ const SettingsView = ({ syncUrl, setSyncUrl, hours, setHours, onSync, onExport, 
 };
 
 const SidebarBtn = ({ active, onClick, icon, label }: any) => (
-  <button onClick={onClick} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${active ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/30' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'}`}>
-    {icon} <span className="font-bold">{label}</span>
+  <button onClick={onClick} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${active ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/30 font-black' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300 font-bold'}`}>
+    {icon} <span>{label}</span>
   </button>
 );
 
