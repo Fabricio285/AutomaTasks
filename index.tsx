@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { 
   LayoutDashboard, CheckSquare, Users, Settings, LogOut, Plus, Clock, 
-  TrendingUp, RefreshCw, AlertCircle, Info, ChevronRight, BarChart2, Trash2, X
+  TrendingUp, RefreshCw, AlertCircle, Info, ChevronRight, BarChart2, Trash2, X, Edit2
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -280,6 +280,10 @@ const App = () => {
            <UsersView 
              users={users} 
              onAdd={(u:any) => setUsers([...users, {...u, id: Date.now().toString()}])}
+             onUpdate={(id:string, update:any) => {
+                setUsers(users.map(u => u.id === id ? { ...u, ...update } : u));
+                if (currentUser.id === id) setCurrentUser({ ...currentUser, ...update });
+             }}
              onDelete={(id:string) => {
                if(id === currentUser.id) return alert('No puedes eliminarte a ti mismo.');
                if(confirm('¿Seguro que deseas eliminar este usuario?')) {
@@ -318,9 +322,37 @@ const SidebarBtn = ({ active, onClick, icon, label }: any) => (
   </button>
 );
 
-const UsersView = ({ users, onAdd, onDelete }: any) => {
+const UsersView = ({ users, onAdd, onUpdate, onDelete }: any) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [f, setF] = useState({ name: '', username: '', password: '', role: 'user' });
+
+  const openAddModal = () => {
+    setEditingId(null);
+    setF({ name: '', username: '', password: '', role: 'user' });
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (user: User) => {
+    setEditingId(user.id);
+    setF({ 
+      name: user.name, 
+      username: user.username, 
+      password: user.password || '', 
+      role: user.role 
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = () => {
+    if (!f.name || !f.username || !f.password) return alert('Todos los campos son obligatorios.');
+    if (editingId) {
+      onUpdate(editingId, f);
+    } else {
+      onAdd(f);
+    }
+    setIsModalOpen(false);
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -329,20 +361,29 @@ const UsersView = ({ users, onAdd, onDelete }: any) => {
           <h3 className="text-2xl font-black tracking-tighter text-slate-900">Control de Miembros</h3>
           <p className="text-slate-400 font-medium text-sm">Gestiona accesos y roles del equipo</p>
         </div>
-        <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2">
+        <button onClick={openAddModal} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2">
           <Plus size={20}/> NUEVO MIEMBRO
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {users.map((u:any) => (
-          <div key={u.id} className="bg-white p-10 rounded-[48px] border border-slate-100 text-center flex flex-col items-center shadow-sm relative group">
-            <button 
-              onClick={() => onDelete(u.id)}
-              className="absolute top-6 right-6 p-3 bg-red-50 text-red-500 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:text-white"
-            >
-              <Trash2 size={18} />
-            </button>
+          <div key={u.id} className="bg-white p-10 rounded-[48px] border border-slate-100 text-center flex flex-col items-center shadow-sm relative group overflow-hidden">
+            <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button 
+                onClick={() => openEditModal(u)}
+                className="p-3 bg-indigo-50 text-indigo-500 rounded-2xl hover:bg-indigo-500 hover:text-white transition-colors"
+                >
+                <Edit2 size={18} />
+                </button>
+                <button 
+                onClick={() => onDelete(u.id)}
+                className="p-3 bg-red-50 text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-colors"
+                >
+                <Trash2 size={18} />
+                </button>
+            </div>
+            
             <div className={`w-20 h-20 rounded-[28px] flex items-center justify-center font-black text-2xl mb-6 shadow-xl ${u.role === 'admin' ? 'bg-indigo-600 text-white shadow-indigo-500/30' : 'bg-slate-100 text-slate-400 shadow-slate-200'}`}>{u.name[0]}</div>
             <p className="font-black text-xl mb-1">{u.name}</p>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">@{u.username}</p>
@@ -355,7 +396,7 @@ const UsersView = ({ users, onAdd, onDelete }: any) => {
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl flex items-center justify-center p-8 z-[60] animate-in fade-in duration-300">
           <div className="bg-white p-12 rounded-[56px] w-full max-w-md shadow-2xl relative">
              <button onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500"><X size={24}/></button>
-             <h3 className="text-3xl font-black tracking-tighter mb-8">Crear Usuario</h3>
+             <h3 className="text-3xl font-black tracking-tighter mb-8">{editingId ? 'Editar Usuario' : 'Crear Usuario'}</h3>
              <div className="space-y-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Nombre Completo</label>
@@ -366,7 +407,7 @@ const UsersView = ({ users, onAdd, onDelete }: any) => {
                   <input type="text" placeholder="Ej: jperez" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.username} onChange={e => setF({...f, username: e.target.value})} />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Contraseña Temporal</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Contraseña</label>
                   <input type="password" placeholder="••••••••" className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={f.password} onChange={e => setF({...f, password: e.target.value})} />
                 </div>
                 <div className="space-y-2">
@@ -377,7 +418,9 @@ const UsersView = ({ users, onAdd, onDelete }: any) => {
                   </select>
                 </div>
              </div>
-             <button onClick={() => { onAdd(f); setIsModalOpen(false); setF({name:'',username:'',password:'',role:'user'}); }} className="w-full bg-indigo-600 text-white py-5 rounded-3xl font-black shadow-xl shadow-indigo-600/30 mt-10 hover:bg-indigo-700 active:scale-95 transition-all">AÑADIR AL EQUIPO</button>
+             <button onClick={handleSubmit} className="w-full bg-indigo-600 text-white py-5 rounded-3xl font-black shadow-xl shadow-indigo-600/30 mt-10 hover:bg-indigo-700 active:scale-95 transition-all uppercase tracking-widest text-sm">
+                {editingId ? 'GUARDAR CAMBIOS' : 'AÑADIR AL EQUIPO'}
+             </button>
           </div>
         </div>
       )}
@@ -480,8 +523,8 @@ const TasksList = ({ user, tasks, users, onUpdate, onDelete, onAdd }: any) => {
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Colaborador Asignado</label>
                     <select className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={f.assignedTo} onChange={e => setF({...f, assignedTo: e.target.value})}>
                         <option value="" disabled>Seleccionar miembro...</option>
-                        {users.filter((u:any)=>u.role === 'user').map((u:any) => (
-                          <option key={u.id} value={u.id}>{u.name} (@{u.username})</option>
+                        {users.map((u:any) => (
+                          <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
                         ))}
                     </select>
                   </div>
